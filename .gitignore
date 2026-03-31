@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+src-tauri/target/
+
+# Secrets & Sessions
+.env
+*.session
+*.session-journal
+
+# Exports (persönliche Daten)
+exports/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.claude/
+.codex
