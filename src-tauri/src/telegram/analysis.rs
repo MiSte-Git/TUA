@@ -28,6 +28,7 @@ pub struct MemberActivity {
 pub struct AnalysisResult {
     pub chat: ChatInfo,
     pub members: Vec<MemberActivity>,
+    pub members_with_messages: u32,
     pub total_messages: u32,
     pub period_months: i32,
 }
@@ -233,6 +234,9 @@ pub async fn run_analysis(
                 }
                 scanned += 1;
 
+                if scanned % 100 == 0 {
+                    let _ = app.emit("message_count", scanned);
+                }
                 if scanned % 500 == 0 {
                     let _ = app.emit("progress", scanned);
                     let _ = app.emit("log", format!("Scanned {} messages…", scanned));
@@ -297,9 +301,11 @@ pub async fn run_analysis(
         })
         .collect();
     members.sort_by(|a, b| b.message_count.cmp(&a.message_count));
+    let members_with_messages = members.len() as u32;
 
     Ok(AnalysisResult {
         chat: chat_info,
+        members_with_messages,
         members,
         total_messages,
         period_months: months,

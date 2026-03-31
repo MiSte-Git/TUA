@@ -68,7 +68,7 @@ async fn export_csv(
     path: String,
     min_messages: u32,
     min_reactions: u32,
-    excluded_user_ids: Vec<i64>,
+    excluded_ids: Vec<i64>,
 ) -> Result<(), String> {
     telegram::export::export_csv(
         &result,
@@ -76,7 +76,7 @@ async fn export_csv(
         std::path::Path::new(&path),
         min_messages,
         min_reactions,
-        &excluded_user_ids,
+        &excluded_ids,
     )
     .map_err(|e: ExportError| e.to_string())
 }

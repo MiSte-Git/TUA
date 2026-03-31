@@ -26,6 +26,7 @@ export interface MemberActivity {
 export interface AnalysisResult {
   chat: ChatInfo;
   members: MemberActivity[];
+  members_with_messages: number;
   total_messages: number;
   period_months: number;
 }

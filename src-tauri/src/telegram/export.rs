@@ -30,22 +30,42 @@ impl From<csv::Error> for ExportError {
 
 /// Write `result` as a CSV file to `path`.
 ///
-/// Columns: user_id, name, username, message_count, reaction_count, active, excluded
-/// Active = message_count ≥ min_messages OR (min_reactions > 0 AND reaction_count ≥ min_reactions)
-/// Excluded members appear in both the main section and a separate section at the end.
+/// Active = message_count >= min_messages AND NOT in excluded_ids.
+/// Uses the same A – B – C formula as the UI:
+///   A = members_with_messages
+///   B = message_count < min_messages  (below threshold, regardless of excluded)
+///   C = message_count >= min_messages AND excluded  (no overlap with B)
+///   active = A – B – C
 pub fn export_csv(
     result: &AnalysisResult,
     chat_info: &ChatInfo,
     path: &Path,
     min_messages: u32,
     min_reactions: u32,
-    excluded_user_ids: &[i64],
+    excluded_ids: &[i64],
 ) -> Result<(), ExportError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ExportError::Io(e.to_string()))?;
     }
 
-    let mut wtr = csv::Writer::from_path(path)?;
+    // flexible(true): metadata rows have 1 field, data rows have 7 — no mismatch error
+    let mut wtr = csv::WriterBuilder::new()
+        .flexible(true)
+        .from_path(path)?;
+
+    // ── A – B – C calculations ───────────────────────────────────────────────
+    let a = result.members_with_messages;
+    let b = result
+        .members
+        .iter()
+        .filter(|m| m.message_count <= min_messages)
+        .count() as u32;
+    let c = result
+        .members
+        .iter()
+        .filter(|m| m.message_count > min_messages && excluded_ids.contains(&m.user_id))
+        .count() as u32;
+    let active_count = a.saturating_sub(b).saturating_sub(c);
 
     // ── Metadata comment rows ────────────────────────────────────────────────
     let now = Utc::now().format("%Y-%m-%dT%H:%M:%S+00:00");
@@ -57,20 +77,21 @@ pub fn export_csv(
     wtr.write_record(&[format!("# Period: {} months", result.period_months)])?;
     wtr.write_record(&[format!("# Total messages scanned: {}", result.total_messages)])?;
     if let Some(mc) = chat_info.member_count {
-        wtr.write_record(&[format!("# Total members: {}", mc)])?;
+        wtr.write_record(&[format!("# Gesamtmitglieder: {}", mc)])?;
     }
-    wtr.write_record(&[format!("# Active members: {}", result.members.len())])?;
-    wtr.write_record(&[format!("# Min messages (active threshold): {}", min_messages)])?;
+    wtr.write_record(&[format!("# Mitglieder mit Nachrichten: {}", a)])?;
+    wtr.write_record(&[format!(
+        "# davon <= Threshold ({}): {}",
+        min_messages,
+        b
+    )])?;
+    if c > 0 {
+        wtr.write_record(&[format!("# manuell ausgeschlossen (> Threshold): {}", c)])?;
+    }
+    wtr.write_record(&[format!("# Aktive Mitglieder: {}", active_count)])?;
+    wtr.write_record(&[format!("# Min messages threshold: {}", min_messages)])?;
     if min_reactions > 0 {
-        wtr.write_record(&[format!("# Min reactions (active threshold): {}", min_reactions)])?;
-    }
-    let excluded_count = result
-        .members
-        .iter()
-        .filter(|m| excluded_user_ids.contains(&m.user_id))
-        .count();
-    if excluded_count > 0 {
-        wtr.write_record(&[format!("# Excluded members: {}", excluded_count)])?;
+        wtr.write_record(&[format!("# Min reactions threshold: {}", min_reactions)])?;
     }
 
     // ── Column header ────────────────────────────────────────────────────────
@@ -84,52 +105,21 @@ pub fn export_csv(
         "excluded",
     ])?;
 
-    // ── Main data rows (non-excluded first, then excluded) ────────────────────
-    let is_active = |msg: u32, react: u32| -> bool {
-        msg >= min_messages || (min_reactions > 0 && react >= min_reactions)
-    };
+    // ── Data rows — all members (no rows omitted) ────────────────────────────
+    for member in &result.members {
+        let is_excluded = excluded_ids.contains(&member.user_id);
+        // active = above threshold AND not excluded (mirrors UI trulyActive logic)
+        let is_active = member.message_count > min_messages && !is_excluded;
 
-    let (included, excluded): (Vec<_>, Vec<_>) = result
-        .members
-        .iter()
-        .partition(|m| !excluded_user_ids.contains(&m.user_id));
-
-    for member in &included {
         wtr.write_record(&[
             member.user_id.to_string(),
             member.name.clone(),
             member.username.clone().unwrap_or_default(),
             member.message_count.to_string(),
             member.reaction_count.to_string(),
-            is_active(member.message_count, member.reaction_count).to_string(),
-            "false".to_string(),
+            is_active.to_string(),
+            is_excluded.to_string(),
         ])?;
-    }
-
-    // ── Excluded section ─────────────────────────────────────────────────────
-    if !excluded.is_empty() {
-        wtr.write_record(&[""])?; // blank separator row
-        wtr.write_record(&["# Excluded members:"])?;
-        wtr.write_record(&[
-            "user_id",
-            "name",
-            "username",
-            "message_count",
-            "reaction_count",
-            "active",
-            "excluded",
-        ])?;
-        for member in &excluded {
-            wtr.write_record(&[
-                member.user_id.to_string(),
-                member.name.clone(),
-                member.username.clone().unwrap_or_default(),
-                member.message_count.to_string(),
-                member.reaction_count.to_string(),
-                is_active(member.message_count, member.reaction_count).to_string(),
-                "true".to_string(),
-            ])?;
-        }
     }
 
     wtr.flush()?;

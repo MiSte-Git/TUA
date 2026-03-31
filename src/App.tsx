@@ -13,6 +13,7 @@ export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [progress, setProgress] = useState<number>(0);
+  const [scannedMessages, setScannedMessages] = useState<number>(0);
 
   // Check auth status on mount
   useEffect(() => {
@@ -29,9 +30,13 @@ export default function App() {
     const unlisten2 = listen<number>("progress", (e) =>
       setProgress(e.payload)
     );
+    const unlisten3 = listen<number>("message_count", (e) =>
+      setScannedMessages(e.payload)
+    );
     return () => {
       unlisten1.then((f) => f());
       unlisten2.then((f) => f());
+      unlisten3.then((f) => f());
     };
   }, []);
 
@@ -51,7 +56,7 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center p-6">
           <LoginFlow onSuccess={() => setPhase("main")} />
         </div>
-        <StatusBar connected={false} progress={0} />
+        <StatusBar connected={false} progress={0} scannedMessages={0} />
       </div>
     );
   }
@@ -66,12 +71,13 @@ export default function App() {
           setResult={setResult}
           setLogs={setLogs}
           setProgress={setProgress}
+          setScannedMessages={setScannedMessages}
           phase={phase}
           setPhase={setPhase}
         />
         <LogWindow logs={logs} />
       </main>
-      <StatusBar connected={connected} progress={progress} />
+      <StatusBar connected={connected} progress={progress} scannedMessages={scannedMessages} />
     </div>
   );
 }

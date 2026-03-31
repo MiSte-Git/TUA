@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { AppPhase, AnalysisResult, ChatInfo } from "../types";
@@ -14,8 +14,63 @@ interface Props {
   setResult: (r: AnalysisResult | null) => void;
   setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setProgress: (p: number) => void;
+  setScannedMessages: (n: number) => void;
   phase: AppPhase;
   setPhase: (p: AppPhase) => void;
+}
+
+const EXCLUDED_KEY = (chatId: number) => `excluded_members_${chatId}`;
+
+function loadExcluded(chatId: number): Map<number, string> {
+  try {
+    const stored = localStorage.getItem(EXCLUDED_KEY(chatId));
+    if (!stored) return new Map();
+    const arr: { user_id: number; name: string }[] = JSON.parse(stored);
+    return new Map(arr.map((e) => [e.user_id, e.name]));
+  } catch {
+    return new Map();
+  }
+}
+
+function saveExcluded(chatId: number, map: Map<number, string>) {
+  const arr = Array.from(map.entries()).map(([user_id, name]) => ({ user_id, name }));
+  localStorage.setItem(EXCLUDED_KEY(chatId), JSON.stringify(arr));
+}
+
+function fmt(n: number) {
+  return n.toLocaleString("de-CH");
+}
+
+function StatRow({
+  label,
+  value,
+  badge,
+  highlight,
+}: {
+  label: string;
+  value: string | number;
+  badge?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-0.5">
+      <span className={`text-sm ${highlight ? "text-[#e0e0f0] font-medium" : "text-[#888aaa]"}`}>
+        {label}
+      </span>
+      <span className="flex items-baseline gap-2 tabular-nums">
+        <span className={`text-sm font-semibold ${highlight ? "text-[#7c6af7]" : "text-[#e0e0f0]"}`}>
+          {value}
+        </span>
+        {badge && (
+          <span className="text-[#888aaa] text-xs whitespace-nowrap">{badge}</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="border-t border-[#3a3a5a] my-1" />;
 }
 
 export default function MainView({
@@ -23,6 +78,7 @@ export default function MainView({
   result,
   setResult,
   setProgress,
+  setScannedMessages,
   setPhase,
 }: Props) {
   const [localChatInfo, setLocalChatInfo] = useState<ChatInfo | null>(null);
@@ -31,26 +87,32 @@ export default function MainView({
   const [includeReactions, setIncludeReactions] = useState(true);
   const [minMessages, setMinMessages] = useState(1);
   const [minReactions, setMinReactions] = useState(0);
-  const [excludedUserIds, setExcludedUserIds] = useState<Set<number>>(new Set());
+  const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
   const [analyzing, setAnalyzing] = useState(false);
   const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    if (!localChatInfo) return;
+    setExcludedMembers(loadExcluded(localChatInfo.id));
+  }, [localChatInfo?.id]);
 
   function handleResolved(chat: ChatInfo, url: string) {
     setLocalChatInfo(chat);
     setChatInfo(chat);
     setChatUrl(url);
-    // Clear previous results when switching chats
     setResult(null);
-    setExcludedUserIds(new Set());
   }
 
-  function handleToggleExcluded(userId: number) {
-    setExcludedUserIds((prev) => {
-      const next = new Set(prev);
+  function handleToggleExcluded(userId: number, name: string) {
+    setExcludedMembers((prev) => {
+      const next = new Map(prev);
       if (next.has(userId)) {
         next.delete(userId);
       } else {
-        next.add(userId);
+        next.set(userId, name);
+      }
+      if (localChatInfo) {
+        saveExcluded(localChatInfo.id, next);
       }
       return next;
     });
@@ -61,7 +123,6 @@ export default function MainView({
     setAnalyzing(true);
     setPhase("analyzing");
     setProgress(0);
-    setExcludedUserIds(new Set());
     try {
       const res = await invoke<AnalysisResult>("run_analysis", {
         chatUrl,
@@ -78,6 +139,7 @@ export default function MainView({
         setAnalyzing(false);
         setPhase("main");
         setProgress(0);
+        setScannedMessages(0);
       }
     }
   }
@@ -87,6 +149,7 @@ export default function MainView({
     setAnalyzing(false);
     setPhase("main");
     setProgress(0);
+    setScannedMessages(0);
   }
 
   async function handleExport() {
@@ -106,13 +169,40 @@ export default function MainView({
           path,
           minMessages,
           minReactions,
-          excludedUserIds: Array.from(excludedUserIds),
+          excludedIds: Array.from(excludedMembers.keys()),
         });
       }
     } catch (_e) {
       // ignore cancel
     }
   }
+
+  // ── Statistics calculations (A – B – C) ─────────────────────────────────────
+  // A = all members who sent at least 1 message
+  // B = members from A with message_count < minMessages (below threshold), regardless of excluded
+  // C = members from A with message_count >= minMessages AND manually excluded
+  // Note: a member below threshold who is also excluded falls only in B, not C (no double-counting)
+  // active = A – B – C
+  const members = result?.members ?? [];
+  const totalMembers = localChatInfo?.member_count ?? members.length;
+
+  const A = result?.members_with_messages ?? 0;
+
+  const B = members.filter((m) => m.message_count <= minMessages).length;
+
+  const C = members.filter(
+    (m) => m.message_count > minMessages && excludedMembers.has(m.user_id)
+  ).length;
+
+  const trulyActive = A - B - C;
+
+  const activePercent =
+    totalMembers > 0 ? ((trulyActive / totalMembers) * 100).toFixed(1) : "0.0";
+
+  const writtenPercent =
+    totalMembers > 0 ? ((A / totalMembers) * 100).toFixed(1) : "0.0";
+
+  const totalMessages = members.reduce((sum, m) => sum + m.message_count, 0);
 
   return (
     <div className="flex-1 flex flex-col gap-4 min-h-0">
@@ -143,29 +233,46 @@ export default function MainView({
             onChangeMinReactions={setMinReactions}
           />
         </div>
+
+        {/* Statistik */}
         <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-2">
           <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
             Statistik
           </p>
           {result ? (
             <>
-              <p className="text-[#e0e0f0] text-sm">
-                <span className="text-[#7c6af7] font-semibold">
-                  {result.total_messages.toLocaleString("de-CH")}
-                </span>
-                {" Nachrichten"}
-              </p>
-              <p className="text-[#888aaa] text-sm">
-                {result.members.length} aktive Mitglieder
-              </p>
-              <p className="text-[#888aaa] text-sm">
-                Zeitraum: {result.period_months} Monate
-              </p>
-              {excludedUserIds.size > 0 && (
-                <p className="text-[#e05555] text-sm">
-                  {excludedUserIds.size} ausgeschlossen
-                </p>
+              <Divider />
+              <StatRow label="Mitglieder gesamt" value={fmt(totalMembers)} />
+              <Divider />
+              <StatRow
+                label="Haben geschrieben"
+                value={fmt(A)}
+                badge={`(${writtenPercent}%)`}
+              />
+              {B > 0 && (
+                <StatRow
+                  label={`≤ ${minMessages} Nachrichten`}
+                  value={`–${fmt(B)}`}
+                  badge="(→ inaktiv)"
+                />
               )}
+              {C > 0 && (
+                <StatRow
+                  label="Manuell ausgeschlossen"
+                  value={`–${fmt(C)}`}
+                  badge="(→ inaktiv)"
+                />
+              )}
+              <Divider />
+              <StatRow
+                label="Wirklich aktiv"
+                value={fmt(trulyActive)}
+                badge={`(${activePercent}%)`}
+                highlight
+              />
+              <Divider />
+              <StatRow label="Nachrichten gesamt" value={fmt(totalMessages)} />
+              <StatRow label="Zeitraum" value={`${result.period_months} Monate`} />
               <button
                 onClick={handleExport}
                 className="mt-auto bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
@@ -174,7 +281,7 @@ export default function MainView({
               </button>
             </>
           ) : (
-            <p className="text-[#3a3a5a] text-sm">—</p>
+            <p className="text-[#3a3a5a] text-sm">Noch keine Analyse durchgeführt</p>
           )}
         </div>
       </div>
@@ -185,7 +292,7 @@ export default function MainView({
         includeReactions={includeReactions}
         minMessages={minMessages}
         minReactions={minReactions}
-        excludedUserIds={excludedUserIds}
+        excludedMembers={excludedMembers}
         onToggleExcluded={handleToggleExcluded}
       />
     </div>
