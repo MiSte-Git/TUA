@@ -1,3 +1,4 @@
+mod config;
 mod telegram;
 
 use telegram::{
@@ -5,16 +6,65 @@ use telegram::{
     FirstMentionResult,
 };
 
+// ── Credentials commands ──────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct CredentialsStatus {
+    api_id_set: bool,
+    api_hash_set: bool,
+}
+
+/// Resolves API credentials using the priority: env vars → config file.
+/// Returns an error string if credentials are missing.
+fn resolve_credentials() -> Result<(i32, String), String> {
+    let env_id = std::env::var("TELEGRAM_API_ID")
+        .ok()
+        .and_then(|v| v.parse::<i32>().ok());
+    let env_hash = std::env::var("TELEGRAM_API_HASH").ok();
+
+    if let (Some(id), Some(hash)) = (env_id, env_hash) {
+        return Ok((id, hash));
+    }
+
+    let cfg = config::load_config();
+    match (cfg.api_id, cfg.api_hash) {
+        (Some(id), Some(hash)) => Ok((id, hash)),
+        _ => Err("Credentials nicht gesetzt. Bitte API ID und API Hash eingeben.".to_string()),
+    }
+}
+
+#[tauri::command]
+fn get_credentials_status() -> CredentialsStatus {
+    let env_id = std::env::var("TELEGRAM_API_ID").is_ok();
+    let env_hash = std::env::var("TELEGRAM_API_HASH").is_ok();
+
+    if env_id && env_hash {
+        return CredentialsStatus {
+            api_id_set: true,
+            api_hash_set: true,
+        };
+    }
+
+    let cfg = config::load_config();
+    CredentialsStatus {
+        api_id_set: env_id || cfg.api_id.is_some(),
+        api_hash_set: env_hash || cfg.api_hash.is_some(),
+    }
+}
+
+#[tauri::command]
+fn save_credentials(api_id: i32, api_hash: String) -> Result<(), String> {
+    config::save_config(&config::AppConfig {
+        api_id: Some(api_id),
+        api_hash: Some(api_hash),
+    })
+}
+
 // ── Auth commands ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
 async fn connect(phone: String) -> Result<ConnectResult, String> {
-    let api_id: i32 = std::env::var("TELEGRAM_API_ID")
-        .map_err(|_| "TELEGRAM_API_ID not set".to_string())?
-        .parse()
-        .map_err(|_| "TELEGRAM_API_ID must be a number".to_string())?;
-    let api_hash = std::env::var("TELEGRAM_API_HASH")
-        .map_err(|_| "TELEGRAM_API_HASH not set".to_string())?;
+    let (api_id, api_hash) = resolve_credentials()?;
     telegram::auth::connect(api_id, &api_hash, &phone)
         .await
         .map_err(|e: AuthError| e.to_string())
@@ -123,7 +173,10 @@ async fn find_first_mention(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
+            get_credentials_status,
+            save_credentials,
             connect,
             submit_code,
             submit_password,

@@ -1,5 +1,10 @@
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
+export interface CredentialsStatus {
+  api_id_set: boolean;
+  api_hash_set: boolean;
+}
+
 export type ConnectStatus = 'ok' | 'code_required' | 'password_required';
 
 export interface ConnectResult {
