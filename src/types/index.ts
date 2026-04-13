@@ -31,6 +31,26 @@ export interface AnalysisResult {
   period_months: number;
 }
 
+// ── Members ───────────────────────────────────────────────────────────────────
+
+export interface ChatMember {
+  user_id: number;
+  name: string;
+  username?: string | null;
+  joined_at?: string | null; // ISO 8601
+}
+
+// ── First-mention ─────────────────────────────────────────────────────────────
+
+export interface FirstMentionResult {
+  first_own_message?: string | null;
+  first_mention?: string | null;
+  first_seen?: string | null;
+  message_context?: string | null;
+  message_link?: string | null;
+  found_in: "own_message" | "mention" | "both" | "not_found";
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 
 export type AppPhase =

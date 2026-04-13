@@ -2,17 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { AppPhase, AnalysisResult, ChatInfo } from "../types";
-import ChatInput from "./ChatInput";
 import PeriodSelector from "./PeriodSelector";
 import Controls from "./Controls";
 import ResultsTable from "./ResultsTable";
 
 interface Props {
   chatInfo: ChatInfo | null;
-  setChatInfo: (c: ChatInfo | null) => void;
+  chatUrl: string;
   result: AnalysisResult | null;
   setResult: (r: AnalysisResult | null) => void;
-  setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setProgress: (p: number) => void;
   setScannedMessages: (n: number) => void;
   phase: AppPhase;
@@ -74,15 +72,14 @@ function Divider() {
 }
 
 export default function MainView({
-  setChatInfo,
+  chatInfo,
+  chatUrl,
   result,
   setResult,
   setProgress,
   setScannedMessages,
   setPhase,
 }: Props) {
-  const [localChatInfo, setLocalChatInfo] = useState<ChatInfo | null>(null);
-  const [chatUrl, setChatUrl] = useState("");
   const [months, setMonths] = useState(3);
   const [includeReactions, setIncludeReactions] = useState(true);
   const [minMessages, setMinMessages] = useState(1);
@@ -92,16 +89,9 @@ export default function MainView({
   const cancelledRef = useRef(false);
 
   useEffect(() => {
-    if (!localChatInfo) return;
-    setExcludedMembers(loadExcluded(localChatInfo.id));
-  }, [localChatInfo?.id]);
-
-  function handleResolved(chat: ChatInfo, url: string) {
-    setLocalChatInfo(chat);
-    setChatInfo(chat);
-    setChatUrl(url);
-    setResult(null);
-  }
+    if (!chatInfo) return;
+    setExcludedMembers(loadExcluded(chatInfo.id));
+  }, [chatInfo?.id]);
 
   function handleToggleExcluded(userId: number, name: string) {
     setExcludedMembers((prev) => {
@@ -111,8 +101,8 @@ export default function MainView({
       } else {
         next.set(userId, name);
       }
-      if (localChatInfo) {
-        saveExcluded(localChatInfo.id, next);
+      if (chatInfo) {
+        saveExcluded(chatInfo.id, next);
       }
       return next;
     });
@@ -153,10 +143,10 @@ export default function MainView({
   }
 
   async function handleExport() {
-    if (!result || !localChatInfo) return;
+    if (!result || !chatInfo) return;
     try {
       const suggested = await invoke<string>("suggested_filename", {
-        chatInfo: localChatInfo,
+        chatInfo,
       });
       const path = await save({
         defaultPath: suggested,
@@ -165,7 +155,7 @@ export default function MainView({
       if (path) {
         await invoke("export_csv", {
           result,
-          chatInfo: localChatInfo,
+          chatInfo,
           path,
           minMessages,
           minReactions,
@@ -178,39 +168,24 @@ export default function MainView({
   }
 
   // ── Statistics calculations (A – B – C) ─────────────────────────────────────
-  // A = all members who sent at least 1 message
-  // B = members from A with message_count < minMessages (below threshold), regardless of excluded
-  // C = members from A with message_count >= minMessages AND manually excluded
-  // Note: a member below threshold who is also excluded falls only in B, not C (no double-counting)
-  // active = A – B – C
   const members = result?.members ?? [];
-  const totalMembers = localChatInfo?.member_count ?? members.length;
+  const totalMembers = chatInfo?.member_count ?? members.length;
 
   const A = result?.members_with_messages ?? 0;
-
   const B = members.filter((m) => m.message_count <= minMessages).length;
-
   const C = members.filter(
     (m) => m.message_count > minMessages && excludedMembers.has(m.user_id)
   ).length;
-
   const trulyActive = A - B - C;
 
   const activePercent =
     totalMembers > 0 ? ((trulyActive / totalMembers) * 100).toFixed(1) : "0.0";
-
   const writtenPercent =
     totalMembers > 0 ? ((A / totalMembers) * 100).toFixed(1) : "0.0";
-
   const totalMessages = members.reduce((sum, m) => sum + m.message_count, 0);
 
   return (
     <div className="flex-1 flex flex-col gap-4 min-h-0">
-      {/* Chat input */}
-      <div className="bg-[#2a2a3e] rounded-xl p-4">
-        <ChatInput onResolved={handleResolved} disabled={analyzing} />
-      </div>
-
       {/* Period selector */}
       <div className="bg-[#2a2a3e] rounded-xl p-4">
         <PeriodSelector value={months} onChange={setMonths} disabled={analyzing} />
@@ -220,7 +195,7 @@ export default function MainView({
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-[#2a2a3e] rounded-xl p-4">
           <Controls
-            chatInfo={localChatInfo}
+            chatInfo={chatInfo}
             months={months}
             onStart={handleStart}
             onStop={handleStop}

@@ -1,6 +1,9 @@
 mod telegram;
 
-use telegram::{AnalysisError, AnalysisResult, AuthError, ChatInfo, ConnectResult, ExportError};
+use telegram::{
+    AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
+    FirstMentionResult,
+};
 
 // ── Auth commands ─────────────────────────────────────────────────────────────
 
@@ -86,6 +89,34 @@ fn suggested_filename(chat_info: ChatInfo) -> String {
     telegram::export::suggested_filename(&chat_info)
 }
 
+// ── Member list command ───────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn load_chat_members(
+    chat_id: i64,
+    app: tauri::AppHandle,
+) -> Result<Vec<ChatMember>, String> {
+    let client = telegram::auth::get_client()
+        .await
+        .ok_or("Not authorized")?;
+    telegram::mention::load_chat_members(&client, chat_id, &app).await
+}
+
+// ── First-mention command ─────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn find_first_mention(
+    chat_id: i64,
+    chat_username: Option<String>,
+    username: String,
+    app: tauri::AppHandle,
+) -> Result<FirstMentionResult, String> {
+    let client = telegram::auth::get_client()
+        .await
+        .ok_or("Not authorized")?;
+    telegram::mention::find_first_mention(&client, chat_id, chat_username, username, &app).await
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -101,6 +132,8 @@ pub fn run() {
             run_analysis,
             export_csv,
             suggested_filename,
+            load_chat_members,
+            find_first_mention,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
