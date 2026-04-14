@@ -101,6 +101,8 @@ pub fn export_csv(
         "username",
         "message_count",
         "reaction_count",
+        "poll_participations",
+        "is_bot",
         "active",
         "excluded",
     ])?;
@@ -117,6 +119,8 @@ pub fn export_csv(
             member.username.clone().unwrap_or_default(),
             member.message_count.to_string(),
             member.reaction_count.to_string(),
+            member.poll_participations.to_string(),
+            member.is_bot.to_string(),
             is_active.to_string(),
             is_excluded.to_string(),
         ])?;

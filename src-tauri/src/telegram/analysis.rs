@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Duration, Utc};
 use grammers_client::{tl, InvocationError};
@@ -6,6 +6,13 @@ use grammers_session::types::{PeerAuth, PeerId, PeerKind, PeerRef};
 use tauri::Emitter;
 
 // ── Public types ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BotMember {
+    pub user_id: i64,
+    pub name: String,
+    pub username: Option<String>,
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatInfo {
@@ -22,6 +29,8 @@ pub struct MemberActivity {
     pub username: Option<String>,
     pub message_count: u32,
     pub reaction_count: u32,
+    pub poll_participations: u32,
+    pub is_bot: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -31,6 +40,7 @@ pub struct AnalysisResult {
     pub members_with_messages: u32,
     pub total_messages: u32,
     pub period_months: i32,
+    pub all_bots: Vec<BotMember>,
 }
 
 #[derive(thiserror::Error, Debug, serde::Serialize)]
@@ -209,6 +219,13 @@ pub async fn run_analysis(
         .await
         .ok_or_else(|| AnalysisError::Telegram("Could not obtain peer reference".into()))?;
 
+    // Collect bots from participant list (independent of message time window)
+    let all_bots = collect_bots(&client, &peer_ref).await.unwrap_or_default();
+    let bot_ids: HashSet<i64> = all_bots.iter().map(|b| b.user_id).collect();
+    if !all_bots.is_empty() {
+        let _ = app.emit("log", format!("{} Bots im Kanal gefunden.", all_bots.len()));
+    }
+
     let cutoff = Utc::now() - Duration::days(months as i64 * 30);
     let _ = app.emit(
         "log",
@@ -219,8 +236,8 @@ pub async fn run_analysis(
         ),
     );
 
-    // user_id → (display_name, username, message_count, reaction_count)
-    let mut activity: HashMap<i64, (String, Option<String>, u32, u32)> = HashMap::new();
+    // user_id → (display_name, username, message_count, reaction_count, poll_participations)
+    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32)> = HashMap::new();
     let mut total_messages: u32 = 0;
     let mut scanned: u32 = 0;
 
@@ -260,7 +277,7 @@ pub async fn run_analysis(
                             }
                         });
 
-                        let entry = activity.entry(uid).or_insert((name, username, 0, 0));
+                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0));
                         entry.2 += 1;
                         total_messages += 1;
 
@@ -281,6 +298,24 @@ pub async fn run_analysis(
                         }
                     }
                 }
+                // Fetch poll participants for poll messages (max +1 per user per poll)
+                if let tl::enums::Message::Message(raw_msg) = &msg.raw {
+                    if let Some(tl::enums::MessageMedia::Poll(_)) = &raw_msg.media {
+                        let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+                        if let Ok(voter_ids) =
+                            fetch_poll_votes(&client, input_peer, msg.id()).await
+                        {
+                            // Deduplicate: each user counts as 1 participation per poll,
+                            // regardless of how many options they selected.
+                            let unique: HashSet<i64> = voter_ids.into_iter().collect();
+                            for uid in unique {
+                                if let Some(e) = activity.get_mut(&uid) {
+                                    e.4 += 1;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Ok(None) => break,
             Err(e) => return Err(AnalysisError::Telegram(e.to_string())),
@@ -292,12 +327,16 @@ pub async fn run_analysis(
 
     let mut members: Vec<MemberActivity> = activity
         .into_iter()
-        .map(|(user_id, (name, username, message_count, reaction_count))| MemberActivity {
-            user_id,
-            name,
-            username,
-            message_count,
-            reaction_count,
+        .map(|(user_id, (name, username, message_count, reaction_count, poll_participations))| {
+            MemberActivity {
+                user_id,
+                name,
+                username,
+                message_count,
+                reaction_count,
+                poll_participations,
+                is_bot: bot_ids.contains(&user_id),
+            }
         })
         .collect();
     members.sort_by(|a, b| b.message_count.cmp(&a.message_count));
@@ -309,7 +348,124 @@ pub async fn run_analysis(
         members,
         total_messages,
         period_months: months,
+        all_bots,
     })
+}
+
+/// Collect all bot members of a channel/supergroup via GetParticipants with
+/// the ChannelParticipantsBots filter.  Returns an empty Vec silently for
+/// regular groups (non-channel peers) or on API errors.
+async fn collect_bots(
+    client: &grammers_client::Client,
+    peer_ref: &PeerRef,
+) -> Result<Vec<BotMember>, AnalysisError> {
+    let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+    let input_channel = match input_peer {
+        tl::enums::InputPeer::Channel(c) => tl::enums::InputChannel::Channel(
+            tl::types::InputChannel {
+                channel_id: c.channel_id,
+                access_hash: c.access_hash,
+            },
+        ),
+        _ => return Ok(Vec::new()),
+    };
+
+    let mut bots = Vec::new();
+    let mut offset = 0i32;
+    let limit = 200i32;
+
+    loop {
+        let result = client
+            .invoke(&tl::functions::channels::GetParticipants {
+                channel: input_channel.clone(),
+                filter: tl::enums::ChannelParticipantsFilter::ChannelParticipantsBots,
+                offset,
+                limit,
+                hash: 0,
+            })
+            .await
+            .map_err(|e| AnalysisError::Telegram(e.to_string()))?;
+
+        let (batch_count, users) = match result {
+            tl::enums::channels::ChannelParticipants::Participants(list) => {
+                (list.participants.len(), list.users)
+            }
+            tl::enums::channels::ChannelParticipants::NotModified => break,
+        };
+
+        if batch_count == 0 {
+            break;
+        }
+
+        for user in users {
+            if let tl::enums::User::User(u) = user {
+                let name = match (
+                    u.first_name.as_deref().filter(|s| !s.is_empty()),
+                    u.last_name.as_deref().filter(|s| !s.is_empty()),
+                ) {
+                    (Some(f), Some(l)) => format!("{} {}", f, l),
+                    (Some(f), None) => f.to_string(),
+                    (None, Some(l)) => l.to_string(),
+                    (None, None) => format!("Bot {}", u.id),
+                };
+                bots.push(BotMember {
+                    user_id: u.id,
+                    name,
+                    username: u.username,
+                });
+            }
+        }
+
+        if batch_count < limit as usize {
+            break;
+        }
+        offset += batch_count as i32;
+    }
+
+    Ok(bots)
+}
+
+/// Fetch all user IDs who voted in a poll message.  Errors are silently ignored
+/// by the caller — not all chats / poll types support GetPollVotes.
+async fn fetch_poll_votes(
+    client: &grammers_client::Client,
+    input_peer: tl::enums::InputPeer,
+    msg_id: i32,
+) -> Result<Vec<i64>, InvocationError> {
+    let mut voter_ids = Vec::new();
+    let mut offset: Option<String> = None;
+
+    loop {
+        let result = client
+            .invoke(&tl::functions::messages::GetPollVotes {
+                peer: input_peer.clone(),
+                id: msg_id,
+                option: None,
+                offset: offset.clone(),
+                limit: 100,
+            })
+            .await?;
+
+        let tl::enums::messages::VotesList::List(list) = result;
+
+        for vote in list.votes {
+            let peer = match vote {
+                tl::enums::MessagePeerVote::Vote(v) => v.peer,
+                tl::enums::MessagePeerVote::InputOption(v) => v.peer,
+                tl::enums::MessagePeerVote::Multiple(v) => v.peer,
+            };
+            if let tl::enums::Peer::User(u) = peer {
+                voter_ids.push(u.user_id);
+            }
+        }
+
+        match list.next_offset {
+            Some(next) => offset = Some(next),
+            None => break,
+        }
+    }
+
+    Ok(voter_ids)
 }
 
 /// Fetch all reaction peers for a single message.

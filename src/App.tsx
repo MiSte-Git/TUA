@@ -4,12 +4,13 @@ import LoginFlow from "./components/LoginFlow";
 import LogWindow from "./components/LogWindow";
 import MainView from "./components/MainView";
 import FirstMentionView from "./components/FirstMentionView";
+import BotList from "./components/BotList";
 import ChatUrlInput from "./components/ChatUrlInput";
 import StatusBar from "./components/StatusBar";
 import type { AppPhase, AnalysisResult, ChatInfo } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 
-type ActiveTab = "analysis" | "first_mention";
+type ActiveTab = "analysis" | "first_mention" | "bots";
 
 export default function App() {
   const [phase, setPhase] = useState<AppPhase>("checking");
@@ -20,6 +21,35 @@ export default function App() {
   const [progress, setProgress] = useState<number>(0);
   const [scannedMessages, setScannedMessages] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<ActiveTab>("analysis");
+  const [notABot, setNotABot] = useState<Map<number, string>>(new Map());
+
+  useEffect(() => {
+    if (!chatInfo) { setNotABot(new Map()); return; }
+    try {
+      const stored = localStorage.getItem(`not_a_bot_${chatInfo.id}`);
+      if (stored) {
+        const arr: { user_id: number; name: string }[] = JSON.parse(stored);
+        setNotABot(new Map(arr.map((e) => [e.user_id, e.name])));
+      } else {
+        setNotABot(new Map());
+      }
+    } catch {
+      setNotABot(new Map());
+    }
+  }, [chatInfo?.id]);
+
+  function toggleNotABot(userId: number, name: string) {
+    if (!chatInfo) return;
+    const id = chatInfo.id;
+    setNotABot((prev) => {
+      const next = new Map(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.set(userId, name);
+      const arr = Array.from(next.entries()).map(([user_id, n]) => ({ user_id, name: n }));
+      localStorage.setItem(`not_a_bot_${id}`, JSON.stringify(arr));
+      return next;
+    });
+  }
 
   useEffect(() => {
     invoke<boolean>("get_auth_status")
@@ -102,10 +132,18 @@ export default function App() {
           >
             Erste Erwähnung
           </button>
+          {result && result.all_bots.length > 0 && (
+            <button
+              onClick={() => setActiveTab("bots")}
+              className={`${tabBase} ${activeTab === "bots" ? tabActive : tabInactive}`}
+            >
+              Bots 🤖
+            </button>
+          )}
         </div>
 
         {/* Tab content */}
-        {activeTab === "analysis" ? (
+        {activeTab === "analysis" && (
           <MainView
             chatInfo={chatInfo}
             chatUrl={chatUrl}
@@ -115,11 +153,25 @@ export default function App() {
             setScannedMessages={setScannedMessages}
             phase={phase}
             setPhase={setPhase}
+            notABot={notABot}
+            onSwitchToBotsTab={
+              result && result.all_bots.length > 0
+                ? () => setActiveTab("bots")
+                : undefined
+            }
           />
-        ) : (
+        )}
+        {activeTab === "first_mention" && (
           <FirstMentionView
             chatId={chatInfo?.id}
             chatUsername={chatInfo?.username}
+          />
+        )}
+        {activeTab === "bots" && (
+          <BotList
+            bots={result?.all_bots ?? []}
+            notABot={notABot}
+            onToggleNotABot={toggleNotABot}
           />
         )}
 

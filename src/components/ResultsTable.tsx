@@ -8,9 +8,10 @@ interface Props {
   minReactions: number;
   excludedMembers: Map<number, string>;
   onToggleExcluded: (userId: number, name: string) => void;
+  notABot: Map<number, string>;
 }
 
-type SortKey = keyof Pick<MemberActivity, "name" | "message_count" | "reaction_count">;
+type SortKey = keyof Pick<MemberActivity, "name" | "message_count" | "reaction_count" | "poll_participations">;
 type SortDir = "asc" | "desc";
 
 function fmt(n: number) {
@@ -29,6 +30,7 @@ export default function ResultsTable({
   minReactions,
   excludedMembers,
   onToggleExcluded,
+  notABot,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("message_count");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -65,6 +67,8 @@ export default function ResultsTable({
       : (bv as number) - (av as number);
   });
 
+  const hasPollVotes = result.members.some((m) => m.poll_participations > 0);
+
   const thBase =
     "px-3 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide cursor-pointer hover:text-[#e0e0f0] select-none whitespace-nowrap border-b border-[#3a3a5a]";
 
@@ -88,6 +92,14 @@ export default function ResultsTable({
                 onClick={() => handleSort("reaction_count")}
               >
                 Reaktionen <SortIcon active={sortKey === "reaction_count"} dir={sortDir} />
+              </th>
+            )}
+            {hasPollVotes && (
+              <th
+                className={thBase + " text-right"}
+                onClick={() => handleSort("poll_participations")}
+              >
+                Umfragen <SortIcon active={sortKey === "poll_participations"} dir={sortDir} />
               </th>
             )}
           </tr>
@@ -122,6 +134,9 @@ export default function ResultsTable({
                         }`}
                       >
                         {m.name}
+                        {m.is_bot && !notABot.has(m.user_id) && (
+                          <span className="ml-1 text-xs" title="Bot">🤖</span>
+                        )}
                       </p>
                       {m.username ? (
                         <p className="text-[#888aaa] text-xs leading-tight">
@@ -145,6 +160,15 @@ export default function ResultsTable({
                     className={`px-3 py-2 text-right tabular-nums text-[#e0e0f0] ${textColor}`}
                   >
                     {fmt(m.reaction_count)}
+                  </td>
+                )}
+                {hasPollVotes && (
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${textColor} ${
+                      m.poll_participations === 0 ? "text-[#3a3a5a]" : "text-[#e0e0f0]"
+                    }`}
+                  >
+                    {fmt(m.poll_participations)}
                   </td>
                 )}
               </tr>

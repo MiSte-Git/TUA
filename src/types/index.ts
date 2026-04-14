@@ -26,6 +26,14 @@ export interface MemberActivity {
   username: string | null;
   message_count: number;
   reaction_count: number;
+  poll_participations: number;
+  is_bot: boolean;
+}
+
+export interface BotMember {
+  user_id: number;
+  name: string;
+  username: string | null;
 }
 
 export interface AnalysisResult {
@@ -34,6 +42,7 @@ export interface AnalysisResult {
   members_with_messages: number;
   total_messages: number;
   period_months: number;
+  all_bots: BotMember[];
 }
 
 // ── Members ───────────────────────────────────────────────────────────────────

@@ -15,6 +15,8 @@ interface Props {
   setScannedMessages: (n: number) => void;
   phase: AppPhase;
   setPhase: (p: AppPhase) => void;
+  notABot: Map<number, string>;
+  onSwitchToBotsTab?: () => void;
 }
 
 const EXCLUDED_KEY = (chatId: number) => `excluded_members_${chatId}`;
@@ -79,6 +81,8 @@ export default function MainView({
   setProgress,
   setScannedMessages,
   setPhase,
+  notABot,
+  onSwitchToBotsTab,
 }: Props) {
   const [months, setMonths] = useState(3);
   const [includeReactions, setIncludeReactions] = useState(true);
@@ -183,6 +187,12 @@ export default function MainView({
   const writtenPercent =
     totalMembers > 0 ? ((A / totalMembers) * 100).toFixed(1) : "0.0";
   const totalMessages = members.reduce((sum, m) => sum + m.message_count, 0);
+  const membersWithPollVotes = members.filter((m) => m.poll_participations > 0).length;
+  const allBotCount = result?.all_bots?.length ?? 0;
+  const notABotInChannel = result
+    ? result.all_bots.filter((b) => notABot.has(b.user_id)).length
+    : 0;
+  const botCount = allBotCount - notABotInChannel;
 
   return (
     <div className="flex-1 flex flex-col gap-4 min-h-0">
@@ -247,6 +257,36 @@ export default function MainView({
               />
               <Divider />
               <StatRow label="Nachrichten gesamt" value={fmt(totalMessages)} />
+              {membersWithPollVotes > 0 && (
+                <StatRow
+                  label="Mit Umfrage-Teilnahmen"
+                  value={fmt(membersWithPollVotes)}
+                />
+              )}
+              {allBotCount > 0 && (
+                <div
+                  className={`flex items-baseline justify-between gap-2 py-0.5 ${
+                    onSwitchToBotsTab ? "cursor-pointer hover:opacity-80" : ""
+                  }`}
+                  onClick={onSwitchToBotsTab}
+                  title={onSwitchToBotsTab ? "Bot-Tab öffnen" : undefined}
+                >
+                  <span className="text-sm text-[#888aaa]">
+                    Bots im Kanal
+                    {notABotInChannel > 0 && (
+                      <span className="text-[#555570] ml-1">
+                        ({notABotInChannel} ausgeschl.)
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm font-semibold text-[#e0e0f0] tabular-nums">
+                    {fmt(botCount)}
+                    {onSwitchToBotsTab && (
+                      <span className="text-[#7c6af7] ml-1 text-xs">→</span>
+                    )}
+                  </span>
+                </div>
+              )}
               <StatRow label="Zeitraum" value={`${result.period_months} Monate`} />
               <button
                 onClick={handleExport}
@@ -269,6 +309,7 @@ export default function MainView({
         minReactions={minReactions}
         excludedMembers={excludedMembers}
         onToggleExcluded={handleToggleExcluded}
+        notABot={notABot}
       />
     </div>
   );
