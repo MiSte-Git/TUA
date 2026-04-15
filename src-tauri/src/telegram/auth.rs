@@ -88,7 +88,7 @@ fn normalize_phone(phone: &str) -> String {
 pub async fn connect(api_id: i32, api_hash: &str, phone: &str) -> Result<ConnectResult, AuthError> {
     let phone = normalize_phone(phone);
     let path = session_path();
-    log::info!("Opening session at {}", path.display());
+    log::info!("Session-Datei wird geöffnet: {}", path.display());
 
     let session = Arc::new(
         SqliteSession::open(&path)
@@ -105,7 +105,7 @@ pub async fn connect(api_id: i32, api_hash: &str, phone: &str) -> Result<Connect
         .await
         .map_err(|e| AuthError::Connection(e.to_string()))?
     {
-        log::info!("Session already authorized");
+        log::info!("Session bereits autorisiert");
         let mut guard = global().lock().await;
         *guard = Some(TelegramState {
             client,
@@ -115,7 +115,7 @@ pub async fn connect(api_id: i32, api_hash: &str, phone: &str) -> Result<Connect
         return Ok(ConnectResult::Ok);
     }
 
-    log::info!("Not authorized – requesting login code for {}", phone);
+    log::info!("Nicht autorisiert – Login-Code wird angefordert für {}", phone);
     let token = client
         .request_login_code(&phone, api_hash)
         .await
@@ -148,17 +148,17 @@ pub async fn submit_code(code: &str) -> Result<ConnectResult, AuthError> {
             };
             token
         }
-        _ => return Err(AuthError::Unknown("No code was requested".into())),
+        _ => return Err(AuthError::Unknown("Kein Code angefordert".into())),
     };
 
     match state.client.sign_in(&token, code).await {
         Ok(_user) => {
-            log::info!("Signed in successfully via code");
+            log::info!("Erfolgreich per Code eingeloggt");
             state.stage = AuthStage::Authorized;
             Ok(ConnectResult::Ok)
         }
         Err(SignInError::PasswordRequired(password_token)) => {
-            log::info!("2FA password required");
+            log::info!("2FA-Passwort erforderlich");
             state.stage = AuthStage::PasswordRequired {
                 token: password_token,
             };
@@ -182,13 +182,13 @@ pub async fn submit_password(password: &str) -> Result<(), AuthError> {
         AuthStage::PasswordRequired { token } => token,
         other => {
             state.stage = other;
-            return Err(AuthError::Unknown("No password was requested".into()));
+            return Err(AuthError::Unknown("Kein Passwort angefordert".into()));
         }
     };
 
     match state.client.check_password(password_token, password).await {
         Ok(_user) => {
-            log::info!("2FA password accepted");
+            log::info!("2FA-Passwort akzeptiert");
             state.stage = AuthStage::Authorized;
             Ok(())
         }

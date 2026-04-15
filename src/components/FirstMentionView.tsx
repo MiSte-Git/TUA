@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
+import { useTranslation } from "react-i18next";
 import type { FirstMentionResult, ChatMember } from "../types";
 
 interface Props {
@@ -40,6 +41,7 @@ function Divider() {
 }
 
 export default function FirstMentionView({ chatId, chatUsername }: Props) {
+  const { t } = useTranslation();
   // ── All hooks before any early return ────────────────────────────────────
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
@@ -210,7 +212,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
 
         {membersLoading && (
           <p className="text-[#888aaa] text-xs animate-pulse">
-            Mitglieder werden geladen… ({membersCount} bisher)
+            {t("first_mention.members_loading", { count: membersCount })}
           </p>
         )}
 
@@ -219,7 +221,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="@username oder Name"
+              placeholder={t("first_mention.search_placeholder")}
               value={username}
               onChange={(e) => {
                 setUsername(e.target.value);
@@ -238,7 +240,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
               disabled={loading || !normalizedUsername}
               className="bg-[#7c6af7] hover:bg-[#6a58e0] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {loading ? "Sucht…" : "Suchen"}
+              {loading ? t("first_mention.searching") : t("first_mention.search_button")}
             </button>
           </div>
 

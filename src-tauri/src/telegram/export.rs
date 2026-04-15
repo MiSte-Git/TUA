@@ -74,24 +74,29 @@ pub fn export_csv(
     if let Some(username) = &chat_info.username {
         wtr.write_record(&[format!("# Username: @{}", username)])?;
     }
-    wtr.write_record(&[format!("# Period: {} months", result.period_months)])?;
-    wtr.write_record(&[format!("# Total messages scanned: {}", result.total_messages)])?;
+    if result.period_months > 0 {
+        wtr.write_record(&[format!("# Zeitraum: {} Monate", result.period_months)])?;
+    } else {
+        let from = result.period_from.as_deref().unwrap_or("?");
+        let to = result.period_to.as_deref().unwrap_or("?");
+        wtr.write_record(&[format!("# Zeitraum: {} bis {}", from, to)])?;
+    }
+    wtr.write_record(&[format!("# Nachrichten gescannt: {}", result.total_messages)])?;
     if let Some(mc) = chat_info.member_count {
         wtr.write_record(&[format!("# Gesamtmitglieder: {}", mc)])?;
     }
     wtr.write_record(&[format!("# Mitglieder mit Nachrichten: {}", a)])?;
     wtr.write_record(&[format!(
-        "# davon <= Threshold ({}): {}",
-        min_messages,
-        b
+        "# davon <= Schwellenwert ({}): {}",
+        min_messages, b
     )])?;
     if c > 0 {
-        wtr.write_record(&[format!("# manuell ausgeschlossen (> Threshold): {}", c)])?;
+        wtr.write_record(&[format!("# manuell ausgeschlossen (> Schwellenwert): {}", c)])?;
     }
     wtr.write_record(&[format!("# Aktive Mitglieder: {}", active_count)])?;
-    wtr.write_record(&[format!("# Min messages threshold: {}", min_messages)])?;
+    wtr.write_record(&[format!("# Mindest-Nachrichten: {}", min_messages)])?;
     if min_reactions > 0 {
-        wtr.write_record(&[format!("# Min reactions threshold: {}", min_reactions)])?;
+        wtr.write_record(&[format!("# Mindest-Reaktionen: {}", min_reactions)])?;
     }
 
     // ── Column header ────────────────────────────────────────────────────────
@@ -102,6 +107,7 @@ pub fn export_csv(
         "message_count",
         "reaction_count",
         "poll_participations",
+        "quiz_participations",
         "is_bot",
         "active",
         "excluded",
@@ -120,6 +126,7 @@ pub fn export_csv(
             member.message_count.to_string(),
             member.reaction_count.to_string(),
             member.poll_participations.to_string(),
+            member.quiz_participations.to_string(),
             member.is_bot.to_string(),
             is_active.to_string(),
             is_excluded.to_string(),

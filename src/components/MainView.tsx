@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import type { AppPhase, AnalysisResult, ChatInfo } from "../types";
 import PeriodSelector from "./PeriodSelector";
 import Controls from "./Controls";
 import ResultsTable from "./ResultsTable";
+import Tooltip from "./Tooltip";
 
 interface Props {
   chatInfo: ChatInfo | null;
@@ -41,13 +43,19 @@ function fmt(n: number) {
   return n.toLocaleString("de-CH");
 }
 
+function fmtDateShort(iso?: string | null) {
+  if (!iso) return "?";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 function StatRow({
   label,
   value,
   badge,
   highlight,
 }: {
-  label: string;
+  label: string | React.ReactNode;
   value: string | number;
   badge?: string;
   highlight?: boolean;
@@ -84,8 +92,13 @@ export default function MainView({
   notABot,
   onSwitchToBotsTab,
 }: Props) {
-  const [months, setMonths] = useState(3);
-  const [includeReactions, setIncludeReactions] = useState(true);
+  const { t } = useTranslation();
+  const [months, setMonths] = useState(1); // 0 = custom
+  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateTo, setDateTo] = useState<Date | null>(new Date());
+  const [includeReactions, setIncludeReactions] = useState(false);
+  const [includePolls, setIncludePolls] = useState(true);
+  const [includeQuizzes, setIncludeQuizzes] = useState(false);
   const [minMessages, setMinMessages] = useState(1);
   const [minReactions, setMinReactions] = useState(0);
   const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
@@ -122,6 +135,10 @@ export default function MainView({
         chatUrl,
         months,
         includeReactions,
+        includePolls,
+        includeQuizzes,
+        dateFrom: months === 0 ? (dateFrom ? dateFrom.toLocaleDateString("en-CA") : null) : null,
+        dateTo: months === 0 ? (dateTo ? dateTo.toLocaleDateString("en-CA") : null) : null,
       });
       if (!cancelledRef.current) {
         setResult(res);
@@ -188,17 +205,35 @@ export default function MainView({
     totalMembers > 0 ? ((A / totalMembers) * 100).toFixed(1) : "0.0";
   const totalMessages = members.reduce((sum, m) => sum + m.message_count, 0);
   const membersWithPollVotes = members.filter((m) => m.poll_participations > 0).length;
+  const membersWithQuizVotes = members.filter((m) => m.quiz_participations > 0).length;
+  const avgPollParticipation = result?.avg_poll_participation ?? 0;
+  const avgQuizParticipation = result?.avg_quiz_participation ?? 0;
   const allBotCount = result?.all_bots?.length ?? 0;
   const notABotInChannel = result
     ? result.all_bots.filter((b) => notABot.has(b.user_id)).length
     : 0;
   const botCount = allBotCount - notABotInChannel;
 
+  const periodLabel =
+    result
+      ? result.period_months > 0
+        ? t("stats.period_months", { count: result.period_months })
+        : `${fmtDateShort(result.period_from)} – ${fmtDateShort(result.period_to)}`
+      : "";
+
   return (
     <div className="flex-1 flex flex-col gap-4 min-h-0">
       {/* Period selector */}
       <div className="bg-[#2a2a3e] rounded-xl p-4">
-        <PeriodSelector value={months} onChange={setMonths} disabled={analyzing} />
+        <PeriodSelector
+          months={months}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onChangeMonths={setMonths}
+          onChangeDates={(from, to) => { setDateFrom(from); setDateTo(to); }}
+          disabled={analyzing}
+        />
+
       </div>
 
       {/* Controls + Statistik */}
@@ -212,6 +247,10 @@ export default function MainView({
             analyzing={analyzing}
             includeReactions={includeReactions}
             onToggleReactions={setIncludeReactions}
+            includePolls={includePolls}
+            onTogglePolls={setIncludePolls}
+            includeQuizzes={includeQuizzes}
+            onToggleQuizzes={setIncludeQuizzes}
             minMessages={minMessages}
             minReactions={minReactions}
             onChangeMinMessages={setMinMessages}
@@ -222,45 +261,103 @@ export default function MainView({
         {/* Statistik */}
         <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-2">
           <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-            Statistik
+            {t("stats.label")}
           </p>
           {result ? (
             <>
               <Divider />
-              <StatRow label="Mitglieder gesamt" value={fmt(totalMembers)} />
+              <StatRow label={t("stats.total_members")} value={fmt(totalMembers)} />
               <Divider />
               <StatRow
-                label="Haben geschrieben"
+                label={
+                  <Tooltip text={t("tooltips.written")}>
+                    <span>{t("stats.written")}</span>
+                  </Tooltip>
+                }
                 value={fmt(A)}
                 badge={`(${writtenPercent}%)`}
               />
               {B > 0 && (
                 <StatRow
-                  label={`≤ ${minMessages} Nachrichten`}
+                  label={t("stats.below_threshold", { count: minMessages })}
                   value={`–${fmt(B)}`}
-                  badge="(→ inaktiv)"
+                  badge={t("stats.inactive")}
                 />
               )}
               {C > 0 && (
                 <StatRow
-                  label="Manuell ausgeschlossen"
+                  label={t("stats.excluded")}
                   value={`–${fmt(C)}`}
-                  badge="(→ inaktiv)"
+                  badge={t("stats.inactive")}
                 />
               )}
               <Divider />
               <StatRow
-                label="Wirklich aktiv"
+                label={
+                  <Tooltip text={t("tooltips.truly_active")}>
+                    <span>{t("stats.truly_active")}</span>
+                  </Tooltip>
+                }
                 value={fmt(trulyActive)}
                 badge={`(${activePercent}%)`}
                 highlight
               />
               <Divider />
-              <StatRow label="Nachrichten gesamt" value={fmt(totalMessages)} />
+              <StatRow label={t("stats.total_messages")} value={fmt(totalMessages)} />
+              {(result.total_polls_in_period ?? 0) > 0 && (
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.total_polls")}>
+                      <span>{t("stats.total_polls")}</span>
+                    </Tooltip>
+                  }
+                  value={fmt(result.total_polls_in_period)}
+                />
+              )}
               {membersWithPollVotes > 0 && (
                 <StatRow
-                  label="Mit Umfrage-Teilnahmen"
+                  label={
+                    <Tooltip text={t("tooltips.poll_participants")}>
+                      <span>{t("stats.poll_participants")}</span>
+                    </Tooltip>
+                  }
                   value={fmt(membersWithPollVotes)}
+                />
+              )}
+              {(result.total_polls_in_period ?? 0) > 0 && avgPollParticipation > 0 && (
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.avg_poll")}>
+                      <span>{t("stats.avg_poll")}</span>
+                    </Tooltip>
+                  }
+                  value={avgPollParticipation.toFixed(1)}
+                />
+              )}
+              {(result.total_quizzes_in_period ?? 0) > 0 && (
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.total_quizzes")}>
+                      <span>{t("stats.total_quizzes")}</span>
+                    </Tooltip>
+                  }
+                  value={fmt(result.total_quizzes_in_period)}
+                />
+              )}
+              {membersWithQuizVotes > 0 && (
+                <StatRow
+                  label={t("stats.quiz_participants")}
+                  value={fmt(membersWithQuizVotes)}
+                />
+              )}
+              {(result.total_quizzes_in_period ?? 0) > 0 && avgQuizParticipation > 0 && (
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.avg_quiz")}>
+                      <span>{t("stats.avg_quiz")}</span>
+                    </Tooltip>
+                  }
+                  value={avgQuizParticipation.toFixed(1)}
                 />
               )}
               {allBotCount > 0 && (
@@ -272,10 +369,10 @@ export default function MainView({
                   title={onSwitchToBotsTab ? "Bot-Tab öffnen" : undefined}
                 >
                   <span className="text-sm text-[#888aaa]">
-                    Bots im Kanal
+                    {t("stats.bots")}
                     {notABotInChannel > 0 && (
                       <span className="text-[#555570] ml-1">
-                        ({notABotInChannel} ausgeschl.)
+                        {t("stats.bots_excluded_hint", { count: notABotInChannel })}
                       </span>
                     )}
                   </span>
@@ -287,16 +384,29 @@ export default function MainView({
                   </span>
                 </div>
               )}
-              <StatRow label="Zeitraum" value={`${result.period_months} Monate`} />
+              <StatRow
+                label={
+                  <Tooltip text={t("tooltips.own_rights")}>
+                    <span>{t("stats.own_rights")}</span>
+                  </Tooltip>
+                }
+                value={
+                  result.own_is_admin
+                    ? t("stats.own_rights_admin")
+                    : t("stats.own_rights_member")
+                }
+                highlight={result.own_is_admin}
+              />
+              <StatRow label={t("stats.period")} value={periodLabel} />
               <button
                 onClick={handleExport}
                 className="mt-auto bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
               >
-                ↓ CSV exportieren
+                {t("stats.export_csv")}
               </button>
             </>
           ) : (
-            <p className="text-[#3a3a5a] text-sm">Noch keine Analyse durchgeführt</p>
+            <p className="text-[#3a3a5a] text-sm">{t("stats.no_analysis")}</p>
           )}
         </div>
       </div>
@@ -305,6 +415,8 @@ export default function MainView({
       <ResultsTable
         result={result}
         includeReactions={includeReactions}
+        includePolls={includePolls}
+        includeQuizzes={includeQuizzes}
         minMessages={minMessages}
         minReactions={minReactions}
         excludedMembers={excludedMembers}

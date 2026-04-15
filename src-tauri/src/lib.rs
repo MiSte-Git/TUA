@@ -105,11 +105,24 @@ async fn run_analysis(
     chat_url: String,
     months: i32,
     include_reactions: bool,
+    include_polls: bool,
+    include_quizzes: bool,
+    date_from: Option<String>,
+    date_to: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<AnalysisResult, String> {
-    telegram::analysis::run_analysis(&chat_url, months, include_reactions, app)
-        .await
-        .map_err(|e: AnalysisError| e.to_string())
+    telegram::analysis::run_analysis(
+        &chat_url,
+        months,
+        include_reactions,
+        include_polls,
+        include_quizzes,
+        date_from,
+        date_to,
+        app,
+    )
+    .await
+    .map_err(|e: AnalysisError| e.to_string())
 }
 
 // ── Export commands ───────────────────────────────────────────────────────────

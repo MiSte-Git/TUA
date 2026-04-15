@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import type { ChatInfo } from "../types";
 
 interface Props {
@@ -31,6 +32,7 @@ function saveToHistory(entry: HistoryEntry, current: HistoryEntry[]): HistoryEnt
 }
 
 export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
+  const { t } = useTranslation();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +153,7 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
           disabled={loading || disabled || !url.trim()}
           className="bg-[#7c6af7] hover:bg-[#6a58e0] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
-          {loading ? "Lädt…" : "Verbinden"}
+          {loading ? t("chat.loading") : t("chat.connect")}
         </button>
       </div>
 
@@ -166,7 +168,7 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
           <div className="text-right">
             {resolved.member_count !== null ? (
               <p className="text-[#7c6af7] text-sm font-semibold">
-                {resolved.member_count.toLocaleString("de-CH")} Mitglieder
+                {t("chat.member_count", { count: resolved.member_count.toLocaleString("de-CH") })}
               </p>
             ) : (
               <div className="flex items-center gap-2">

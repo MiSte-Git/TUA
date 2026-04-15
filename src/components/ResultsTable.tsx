@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { AnalysisResult, MemberActivity } from "../types";
 
 interface Props {
   result: AnalysisResult | null;
   includeReactions: boolean;
+  includePolls: boolean;
+  includeQuizzes: boolean;
   minMessages: number;
   minReactions: number;
   excludedMembers: Map<number, string>;
@@ -11,7 +14,7 @@ interface Props {
   notABot: Map<number, string>;
 }
 
-type SortKey = keyof Pick<MemberActivity, "name" | "message_count" | "reaction_count" | "poll_participations">;
+type SortKey = keyof Pick<MemberActivity, "name" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations">;
 type SortDir = "asc" | "desc";
 
 function fmt(n: number) {
@@ -26,19 +29,22 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export default function ResultsTable({
   result,
   includeReactions,
+  includePolls,
+  includeQuizzes,
   minMessages,
   minReactions,
   excludedMembers,
   onToggleExcluded,
   notABot,
 }: Props) {
+  const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>("message_count");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   if (!result) {
     return (
       <div className="flex-1 bg-[#1e1e2e] rounded-xl flex items-center justify-center min-h-[8rem]">
-        <p className="text-[#3a3a5a] text-sm">Noch keine Analyse durchgeführt</p>
+        <p className="text-[#3a3a5a] text-sm">{t("table.no_results")}</p>
       </div>
     );
   }
@@ -67,7 +73,8 @@ export default function ResultsTable({
       : (bv as number) - (av as number);
   });
 
-  const hasPollVotes = result.members.some((m) => m.poll_participations > 0);
+  const hasPollVotes = includePolls && result.members.some((m) => m.poll_participations > 0);
+  const hasQuizVotes = includeQuizzes && result.members.some((m) => m.quiz_participations > 0);
 
   const thBase =
     "px-3 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide cursor-pointer hover:text-[#e0e0f0] select-none whitespace-nowrap border-b border-[#3a3a5a]";
@@ -78,20 +85,20 @@ export default function ResultsTable({
         <thead className="sticky top-0 z-10 bg-[#2a2a3e]">
           <tr>
             <th className={thBase + " text-left"} onClick={() => handleSort("name")}>
-              Name <SortIcon active={sortKey === "name"} dir={sortDir} />
+              {t("table.name")} <SortIcon active={sortKey === "name"} dir={sortDir} />
             </th>
             <th
               className={thBase + " text-right"}
               onClick={() => handleSort("message_count")}
             >
-              Nachrichten <SortIcon active={sortKey === "message_count"} dir={sortDir} />
+              {t("table.messages")} <SortIcon active={sortKey === "message_count"} dir={sortDir} />
             </th>
             {includeReactions && (
               <th
                 className={thBase + " text-right"}
                 onClick={() => handleSort("reaction_count")}
               >
-                Reaktionen <SortIcon active={sortKey === "reaction_count"} dir={sortDir} />
+                {t("table.reactions")} <SortIcon active={sortKey === "reaction_count"} dir={sortDir} />
               </th>
             )}
             {hasPollVotes && (
@@ -99,7 +106,15 @@ export default function ResultsTable({
                 className={thBase + " text-right"}
                 onClick={() => handleSort("poll_participations")}
               >
-                Umfragen <SortIcon active={sortKey === "poll_participations"} dir={sortDir} />
+                {t("table.polls")} <SortIcon active={sortKey === "poll_participations"} dir={sortDir} />
+              </th>
+            )}
+            {hasQuizVotes && (
+              <th
+                className={thBase + " text-right"}
+                onClick={() => handleSort("quiz_participations")}
+              >
+                {t("table.quizzes")} <SortIcon active={sortKey === "quiz_participations"} dir={sortDir} />
               </th>
             )}
           </tr>
@@ -120,7 +135,7 @@ export default function ResultsTable({
                 key={m.user_id}
                 className={baseRow}
                 onClick={() => onToggleExcluded(m.user_id, m.name)}
-                title={excluded ? "Klicken zum Einschließen" : "Klicken zum Ausschließen"}
+                title={excluded ? t("table.click_include") : t("table.click_exclude")}
               >
                 <td className={`px-3 py-2 ${textColor}`}>
                   <div className="flex items-center gap-2">
@@ -169,6 +184,15 @@ export default function ResultsTable({
                     }`}
                   >
                     {fmt(m.poll_participations)}
+                  </td>
+                )}
+                {hasQuizVotes && (
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${textColor} ${
+                      m.quiz_participations === 0 ? "text-[#3a3a5a]" : "text-[#e0e0f0]"
+                    }`}
+                  >
+                    {fmt(m.quiz_participations)}
                   </td>
                 )}
               </tr>

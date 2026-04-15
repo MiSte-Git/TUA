@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use grammers_client::{tl, InvocationError};
 use grammers_session::types::{PeerAuth, PeerId, PeerKind, PeerRef};
 use tauri::Emitter;
@@ -30,6 +30,7 @@ pub struct MemberActivity {
     pub message_count: u32,
     pub reaction_count: u32,
     pub poll_participations: u32,
+    pub quiz_participations: u32,
     pub is_bot: bool,
 }
 
@@ -39,8 +40,16 @@ pub struct AnalysisResult {
     pub members: Vec<MemberActivity>,
     pub members_with_messages: u32,
     pub total_messages: u32,
-    pub period_months: i32,
+    pub period_months: i32,            // 0 = custom date range
+    pub period_from: Option<String>,   // ISO date, set when period_months == 0
+    pub period_to: Option<String>,     // ISO date, set when period_months == 0
+    pub total_polls_in_period: u32,    // Umfragen (quiz=false) im Zeitraum
+    pub total_quizzes_in_period: u32,  // Quizze (quiz=true) im Zeitraum
     pub all_bots: Vec<BotMember>,
+    pub own_is_admin: bool,
+    pub own_can_get_participants: bool,
+    pub avg_poll_participation: f32,   // Ø Umfrage-Teilnahmen pro aktivem Teilnehmer
+    pub avg_quiz_participation: f32,   // Ø Quiz-Teilnahmen pro aktivem Teilnehmer
 }
 
 #[derive(thiserror::Error, Debug, serde::Serialize)]
@@ -173,12 +182,17 @@ pub async fn resolve_chat(chat_url: &str) -> Result<ChatInfo, AnalysisError> {
     Ok(info)
 }
 
-/// Scan messages for the given chat over the last `months` months and compute
-/// per-user activity.  Progress and log events are emitted to the frontend.
+/// Scan messages for the given chat over the last `months` months (or a custom
+/// date range) and compute per-user activity.  Progress and log events are
+/// emitted to the frontend.
 pub async fn run_analysis(
     chat_url: &str,
     months: i32,
     include_reactions: bool,
+    include_polls: bool,
+    include_quizzes: bool,
+    date_from: Option<String>,
+    date_to: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<AnalysisResult, AnalysisError> {
     let client = super::auth::get_client()
@@ -187,7 +201,7 @@ pub async fn run_analysis(
 
     let (peer, label) = match parse_chat_identifier(chat_url)? {
         ChatIdentifier::Username(name) => {
-            let _ = app.emit("log", format!("Resolving @{}…", name));
+            let _ = app.emit("log", format!("Kanal @{} wird aufgelöst…", name));
             let peer = client
                 .resolve_username(&name)
                 .await
@@ -196,7 +210,7 @@ pub async fn run_analysis(
             (peer, format!("@{}", name))
         }
         ChatIdentifier::ChannelId(id) => {
-            let _ = app.emit("log", format!("Resolving channel {}…", id));
+            let _ = app.emit("log", format!("Kanal {} wird aufgelöst…", id));
             let peer_ref = PeerRef {
                 id: PeerId::channel(id),
                 auth: PeerAuth::default(),
@@ -226,20 +240,56 @@ pub async fn run_analysis(
         let _ = app.emit("log", format!("{} Bots im Kanal gefunden.", all_bots.len()));
     }
 
-    let cutoff = Utc::now() - Duration::days(months as i64 * 30);
+    // Check own admin rights
+    let (own_is_admin, own_can_get_participants) =
+        check_own_permissions(&client, &peer_ref).await;
+
+    // Determine the scan window [cutoff, end_date]
+    let (cutoff, end_date, period_from_str, period_to_str): (
+        DateTime<Utc>,
+        DateTime<Utc>,
+        Option<String>,
+        Option<String>,
+    ) = if months > 0 {
+        (Utc::now() - Duration::days(months as i64 * 30), Utc::now(), None, None)
+    } else {
+        let from_str = date_from
+            .ok_or_else(|| AnalysisError::InvalidUrl("date_from fehlt".into()))?;
+        let to_str = date_to
+            .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+        let from_naive = NaiveDate::parse_from_str(&from_str, "%Y-%m-%d")
+            .map_err(|_| AnalysisError::InvalidUrl(format!("Ungültiges Datum: {}", from_str)))?;
+        let to_naive = NaiveDate::parse_from_str(&to_str, "%Y-%m-%d")
+            .map_err(|_| AnalysisError::InvalidUrl(format!("Ungültiges Datum: {}", to_str)))?;
+        let cutoff_dt = from_naive
+            .and_hms_opt(0, 0, 0)
+            .ok_or_else(|| AnalysisError::InvalidUrl("Ungültiges Datum".into()))?
+            .and_utc();
+        let end_dt = to_naive
+            .and_hms_opt(23, 59, 59)
+            .ok_or_else(|| AnalysisError::InvalidUrl("Ungültiges Datum".into()))?
+            .and_utc();
+        (cutoff_dt, end_dt, Some(from_str), Some(to_str))
+    };
+
     let _ = app.emit(
         "log",
         format!(
-            "Scanning messages since {} for {}…",
+            "Scanne Nachrichten für {} | Zeitraum: {} bis {}",
+            label,
             cutoff.format("%Y-%m-%d"),
-            label
+            end_date.format("%Y-%m-%d"),
         ),
     );
 
-    // user_id → (display_name, username, message_count, reaction_count, poll_participations)
-    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32)> = HashMap::new();
+    // user_id → (name, username, message_count, reaction_count, poll_participations, quiz_participations)
+    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32, u32)> = HashMap::new();
     let mut total_messages: u32 = 0;
+    let mut total_polls: u32 = 0;
+    let mut total_quizzes: u32 = 0;
     let mut scanned: u32 = 0;
+    let mut first_poll_date: Option<DateTime<Utc>> = None;
+    let mut last_poll_date: Option<DateTime<Utc>> = None;
 
     let mut msg_iter = client.iter_messages(peer_ref.clone());
 
@@ -249,6 +299,9 @@ pub async fn run_analysis(
                 if msg.date() < cutoff {
                     break;
                 }
+                if msg.date() > end_date {
+                    continue;
+                }
                 scanned += 1;
 
                 if scanned % 100 == 0 {
@@ -256,7 +309,7 @@ pub async fn run_analysis(
                 }
                 if scanned % 500 == 0 {
                     let _ = app.emit("progress", scanned);
-                    let _ = app.emit("log", format!("Scanned {} messages…", scanned));
+                    let _ = app.emit("log", format!("Bisher {} Nachrichten gescannt…", scanned));
                 }
 
                 if let Some(sender_id) = msg.sender_id() {
@@ -277,7 +330,7 @@ pub async fn run_analysis(
                             }
                         });
 
-                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0));
+                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0, 0));
                         entry.2 += 1;
                         total_messages += 1;
 
@@ -298,19 +351,44 @@ pub async fn run_analysis(
                         }
                     }
                 }
-                // Fetch poll participants for poll messages (max +1 per user per poll)
+                // Umfragen / Quizze erfassen und Teilnahmen zuordnen
                 if let tl::enums::Message::Message(raw_msg) = &msg.raw {
-                    if let Some(tl::enums::MessageMedia::Poll(_)) = &raw_msg.media {
-                        let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
-                        if let Ok(voter_ids) =
-                            fetch_poll_votes(&client, input_peer, msg.id()).await
-                        {
-                            // Deduplicate: each user counts as 1 participation per poll,
-                            // regardless of how many options they selected.
-                            let unique: HashSet<i64> = voter_ids.into_iter().collect();
-                            for uid in unique {
-                                if let Some(e) = activity.get_mut(&uid) {
-                                    e.4 += 1;
+                    if let Some(tl::enums::MessageMedia::Poll(poll_media)) = &raw_msg.media {
+                        let is_quiz = match &poll_media.poll {
+                            tl::enums::Poll::Poll(p) => p.quiz,
+                        };
+
+                        if is_quiz {
+                            total_quizzes += 1;
+                        } else {
+                            total_polls += 1;
+                        }
+
+                        let poll_dt = msg.date();
+                        if first_poll_date.map_or(true, |d| poll_dt > d) {
+                            first_poll_date = Some(poll_dt);
+                        }
+                        if last_poll_date.map_or(true, |d| poll_dt < d) {
+                            last_poll_date = Some(poll_dt);
+                        }
+
+                        // Stimmen nur abrufen wenn der jeweilige Toggle aktiv ist
+                        let should_fetch = if is_quiz { include_quizzes } else { include_polls };
+                        if should_fetch {
+                            let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+                            if let Ok(voter_ids) =
+                                fetch_poll_votes(&client, input_peer, msg.id()).await
+                            {
+                                // Deduplizieren: jeder Nutzer zählt max. 1× pro Abstimmung
+                                let unique: HashSet<i64> = voter_ids.into_iter().collect();
+                                for uid in unique {
+                                    if let Some(e) = activity.get_mut(&uid) {
+                                        if is_quiz {
+                                            e.5 += 1; // quiz_participations
+                                        } else {
+                                            e.4 += 1; // poll_participations
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -322,34 +400,114 @@ pub async fn run_analysis(
         }
     }
 
-    let _ = app.emit("log", format!("Done. {} messages scanned.", scanned));
+    let _ = app.emit("log", format!("Fertig. {} Nachrichten gescannt.", scanned));
+    if total_polls + total_quizzes > 0 {
+        let first_str = first_poll_date
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "?".into());
+        let last_str = last_poll_date
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "?".into());
+        let _ = app.emit(
+            "log",
+            format!(
+                "Umfragen: {} | Quizze: {} | Erste: {} | Letzte: {}",
+                total_polls, total_quizzes, first_str, last_str
+            ),
+        );
+    }
     let _ = app.emit("progress", scanned);
 
     let mut members: Vec<MemberActivity> = activity
         .into_iter()
-        .map(|(user_id, (name, username, message_count, reaction_count, poll_participations))| {
-            MemberActivity {
+        .map(
+            |(
+                user_id,
+                (name, username, message_count, reaction_count, poll_participations, quiz_participations),
+            )| MemberActivity {
                 user_id,
                 name,
                 username,
                 message_count,
                 reaction_count,
                 poll_participations,
+                quiz_participations,
                 is_bot: bot_ids.contains(&user_id),
-            }
-        })
+            },
+        )
         .collect();
     members.sort_by(|a, b| b.message_count.cmp(&a.message_count));
     let members_with_messages = members.len() as u32;
+
+    // Ø Teilnehmer pro Umfrage = Gesamtstimmen / Anzahl Umfragen
+    let total_poll_participations: u32 = members.iter().map(|m| m.poll_participations).sum();
+    let avg_poll_participation: f32 = if total_polls > 0 {
+        total_poll_participations as f32 / total_polls as f32
+    } else {
+        0.0
+    };
+
+    // Ø Teilnehmer pro Quiz = Gesamtstimmen / Anzahl Quizze
+    let total_quiz_participations: u32 = members.iter().map(|m| m.quiz_participations).sum();
+    let avg_quiz_participation: f32 = if total_quizzes > 0 {
+        total_quiz_participations as f32 / total_quizzes as f32
+    } else {
+        0.0
+    };
 
     Ok(AnalysisResult {
         chat: chat_info,
         members_with_messages,
         members,
         total_messages,
+        total_polls_in_period: total_polls,
+        total_quizzes_in_period: total_quizzes,
         period_months: months,
+        period_from: period_from_str,
+        period_to: period_to_str,
         all_bots,
+        own_is_admin,
+        own_can_get_participants,
+        avg_poll_participation,
+        avg_quiz_participation,
     })
+}
+
+/// Check whether the signed-in account is an admin (or creator) of the channel.
+/// Returns `(is_admin, can_get_participants)` — both flags are identical since
+/// participant-list access is gated on admin status in Telegram.
+async fn check_own_permissions(
+    client: &grammers_client::Client,
+    peer_ref: &PeerRef,
+) -> (bool, bool) {
+    let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+    let input_channel = match input_peer {
+        tl::enums::InputPeer::Channel(c) => tl::enums::InputChannel::Channel(
+            tl::types::InputChannel {
+                channel_id: c.channel_id,
+                access_hash: c.access_hash,
+            },
+        ),
+        _ => return (false, false),
+    };
+
+    match client
+        .invoke(&tl::functions::channels::GetParticipant {
+            channel: input_channel,
+            participant: tl::enums::InputPeer::PeerSelf,
+        })
+        .await
+    {
+        Ok(tl::enums::channels::ChannelParticipant::Participant(cp)) => {
+            let is_admin = matches!(
+                cp.participant,
+                tl::enums::ChannelParticipant::Creator(_)
+                    | tl::enums::ChannelParticipant::Admin(_)
+            );
+            (is_admin, is_admin)
+        }
+        _ => (false, false),
+    }
 }
 
 /// Collect all bot members of a channel/supergroup via GetParticipants with

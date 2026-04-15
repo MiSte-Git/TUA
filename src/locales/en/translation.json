@@ -1,0 +1,102 @@
+{
+  "tabs": {
+    "analysis": "Activity Analysis",
+    "first_mention": "First Mention",
+    "bots": "Bots 🤖"
+  },
+  "period": {
+    "label": "Analysis Period",
+    "last_months_one": "Last Month",
+    "last_months_other": "Last {{count}} Months",
+    "custom": "Custom…",
+    "from": "From",
+    "to": "To",
+    "today": "Today"
+  },
+  "controls": {
+    "label": "Options",
+    "include_reactions": "Include Reactions",
+    "include_polls": "Include Polls",
+    "include_quizzes": "Include Quizzes",
+    "min_messages": "Min. Messages",
+    "min_reactions": "Min. Reactions",
+    "threshold_hint": "Members below threshold are considered inactive",
+    "start": "Start Analysis",
+    "analyzing": "Analysis running…",
+    "stop": "Stop"
+  },
+  "stats": {
+    "label": "Statistics",
+    "total_members": "Total members",
+    "written": "Wrote messages",
+    "below_threshold": "≤ {{count}} messages",
+    "inactive": "(→ inactive)",
+    "excluded": "Manually excluded",
+    "truly_active": "Truly active",
+    "total_messages": "Total messages",
+    "total_polls": "Polls in period",
+    "poll_participants": "Poll participants",
+    "avg_poll": "Avg. participants per poll",
+    "total_quizzes": "Quizzes in period",
+    "quiz_participants": "Quiz participants",
+    "avg_quiz": "Avg. participants per quiz",
+    "bots": "Bots in channel",
+    "bots_excluded_hint": "({{count}} excl.)",
+    "own_rights": "Own rights",
+    "own_rights_admin": "Admin ✓",
+    "own_rights_member": "Member",
+    "period": "Period",
+    "period_months_one": "{{count}} Month",
+    "period_months_other": "{{count}} Months",
+    "no_analysis": "No analysis run yet",
+    "export_csv": "↓ Export CSV"
+  },
+  "tooltips": {
+    "written": "Members who wrote at least one message in the selected period.",
+    "truly_active": "Calculated as: Wrote messages – below threshold – manually excluded.",
+    "total_polls": "Number of actual polls (no quizzes) in the selected period.",
+    "total_quizzes": "Number of quiz polls in the selected period.",
+    "poll_participants": "Number of distinct participants across all polls in the selected period.",
+    "avg_poll": "Total votes by all members divided by the number of polls in the selected period.",
+    "avg_quiz": "Total votes by all members divided by the number of quizzes in the selected period.",
+    "own_rights": "Shows whether you have admin rights in this channel. Admins can access participant lists, which improves bot detection."
+  },
+  "table": {
+    "no_results": "No analysis run yet",
+    "name": "Name",
+    "messages": "Messages",
+    "reactions": "Reactions",
+    "polls": "Polls",
+    "quizzes": "Quizzes",
+    "click_include": "Click to include",
+    "click_exclude": "Click to exclude"
+  },
+  "bots": {
+    "none_found": "No bots found in channel",
+    "count_label_one": "{{count}} Bot in channel (time-independent)",
+    "count_label_other": "{{count}} Bots in channel (time-independent)",
+    "username": "Username",
+    "user_id": "User ID",
+    "not_a_bot": "✕ Not a bot",
+    "excluded_section": "Manually marked as 'Not a bot' ({{count}})",
+    "restore": "↩ Restore"
+  },
+  "chat": {
+    "connect": "Connect",
+    "loading": "Loading…",
+    "member_count": "{{count}} members"
+  },
+  "first_mention": {
+    "search_placeholder": "@username or name",
+    "search_button": "Search",
+    "searching": "Searching…",
+    "members_loading": "Loading members… ({{count}} so far)"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Not connected",
+    "scanning": "Scanning messages… {{count}} so far",
+    "lang_de": "DE",
+    "lang_en": "EN"
+  }
+}

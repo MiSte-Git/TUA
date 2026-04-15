@@ -27,6 +27,7 @@ export interface MemberActivity {
   message_count: number;
   reaction_count: number;
   poll_participations: number;
+  quiz_participations: number;
   is_bot: boolean;
 }
 
@@ -41,8 +42,16 @@ export interface AnalysisResult {
   members: MemberActivity[];
   members_with_messages: number;
   total_messages: number;
-  period_months: number;
+  period_months: number;           // 0 = custom date range
+  period_from?: string | null;     // ISO date, set when period_months === 0
+  period_to?: string | null;       // ISO date, set when period_months === 0
+  total_polls_in_period: number;   // Umfragen (quiz=false) im Zeitraum
+  total_quizzes_in_period: number; // Quizze (quiz=true) im Zeitraum
   all_bots: BotMember[];
+  own_is_admin: boolean;
+  own_can_get_participants: boolean;
+  avg_poll_participation: number;
+  avg_quiz_participation: number;
 }
 
 // ── Members ───────────────────────────────────────────────────────────────────

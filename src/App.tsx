@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import LoginFlow from "./components/LoginFlow";
 import LogWindow from "./components/LogWindow";
 import MainView from "./components/MainView";
@@ -7,12 +8,14 @@ import FirstMentionView from "./components/FirstMentionView";
 import BotList from "./components/BotList";
 import ChatUrlInput from "./components/ChatUrlInput";
 import StatusBar from "./components/StatusBar";
+import LanguageSelector from "./components/LanguageSelector";
 import type { AppPhase, AnalysisResult, ChatInfo } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 
 type ActiveTab = "analysis" | "first_mention" | "bots";
 
 export default function App() {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<AppPhase>("checking");
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [chatUrl, setChatUrl] = useState("");
@@ -118,28 +121,31 @@ export default function App() {
           />
         </div>
 
-        {/* Tab bar */}
-        <div className="flex border-b border-[#3a3a5a]">
+        {/* Tab bar + language selector */}
+        <div className="flex items-center border-b border-[#3a3a5a]">
           <button
             onClick={() => setActiveTab("analysis")}
             className={`${tabBase} ${activeTab === "analysis" ? tabActive : tabInactive}`}
           >
-            Aktivitätsanalyse
+            {t("tabs.analysis")}
           </button>
           <button
             onClick={() => setActiveTab("first_mention")}
             className={`${tabBase} ${activeTab === "first_mention" ? tabActive : tabInactive}`}
           >
-            Erste Erwähnung
+            {t("tabs.first_mention")}
           </button>
           {result && result.all_bots.length > 0 && (
             <button
               onClick={() => setActiveTab("bots")}
               className={`${tabBase} ${activeTab === "bots" ? tabActive : tabInactive}`}
             >
-              Bots 🤖
+              {t("tabs.bots")}
             </button>
           )}
+          <div className="ml-auto pr-1">
+            <LanguageSelector />
+          </div>
         </div>
 
         {/* Tab content */}

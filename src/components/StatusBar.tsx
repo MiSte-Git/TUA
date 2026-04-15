@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 
 interface Props {
   connected: boolean;
@@ -10,6 +11,8 @@ function fmt(n: number) {
 }
 
 export default function StatusBar({ connected, progress, scannedMessages }: Props) {
+  const { t } = useTranslation();
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#2a2a3e] border-t border-[#3a3a5a] px-4 py-1.5 flex items-center gap-3">
       {/* Connection indicator */}
@@ -17,13 +20,13 @@ export default function StatusBar({ connected, progress, scannedMessages }: Prop
         {connected ? "●" : "○"}
       </span>
       <span className="text-[#888aaa] text-xs">
-        {connected ? "Verbunden" : "Nicht verbunden"}
+        {connected ? t("status.connected") : t("status.disconnected")}
       </span>
 
       {/* Live message counter (visible while scanning) */}
       {scannedMessages > 0 && (
         <span className="text-[#888aaa] text-xs">
-          Scanne Nachrichten… {fmt(scannedMessages)} bisher
+          {t("status.scanning", { count: fmt(scannedMessages) })}
         </span>
       )}
 

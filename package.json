@@ -13,8 +13,13 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-shell": "^2.3.5",
+    "@types/react-datepicker": "^7.0.0",
+    "i18next": "^26.0.4",
+    "i18next-browser-languagedetector": "^8.2.1",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-datepicker": "^9.1.0",
+    "react-dom": "^19.2.4",
+    "react-i18next": "^17.0.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

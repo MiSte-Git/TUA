@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ChatInfo } from "../types";
 
 interface Props {
@@ -8,6 +9,10 @@ interface Props {
   analyzing: boolean;
   includeReactions: boolean;
   onToggleReactions: (v: boolean) => void;
+  includePolls: boolean;
+  onTogglePolls: (v: boolean) => void;
+  includeQuizzes: boolean;
+  onToggleQuizzes: (v: boolean) => void;
   minMessages: number;
   minReactions: number;
   onChangeMinMessages: (v: number) => void;
@@ -49,15 +54,21 @@ export default function Controls({
   analyzing,
   includeReactions,
   onToggleReactions,
+  includePolls,
+  onTogglePolls,
+  includeQuizzes,
+  onToggleQuizzes,
   minMessages,
   minReactions,
   onChangeMinMessages,
   onChangeMinReactions,
 }: Props) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col gap-4">
       <label className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-        Optionen
+        {t("controls.label")}
       </label>
 
       {/* Reactions toggle */}
@@ -67,13 +78,39 @@ export default function Controls({
           onChange={() => onToggleReactions(!includeReactions)}
           disabled={analyzing}
         />
-        <span className="text-[#e0e0f0] text-sm select-none">Reaktionen einbeziehen</span>
+        <span className="text-[#e0e0f0] text-sm select-none">
+          {t("controls.include_reactions")}
+        </span>
+      </div>
+
+      {/* Polls toggle */}
+      <div className="flex items-center gap-3">
+        <Toggle
+          checked={includePolls}
+          onChange={() => onTogglePolls(!includePolls)}
+          disabled={analyzing}
+        />
+        <span className="text-[#e0e0f0] text-sm select-none">
+          {t("controls.include_polls")}
+        </span>
+      </div>
+
+      {/* Quizzes toggle */}
+      <div className="flex items-center gap-3">
+        <Toggle
+          checked={includeQuizzes}
+          onChange={() => onToggleQuizzes(!includeQuizzes)}
+          disabled={analyzing}
+        />
+        <span className="text-[#e0e0f0] text-sm select-none">
+          {t("controls.include_quizzes")}
+        </span>
       </div>
 
       {/* Activity thresholds */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[#888aaa] text-sm">Mindest-Nachrichten</span>
+          <span className="text-[#888aaa] text-sm">{t("controls.min_messages")}</span>
           <input
             type="number"
             min={0}
@@ -86,7 +123,7 @@ export default function Controls({
           />
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[#888aaa] text-sm">Mindest-Reaktionen</span>
+          <span className="text-[#888aaa] text-sm">{t("controls.min_reactions")}</span>
           <input
             type="number"
             min={0}
@@ -98,9 +135,7 @@ export default function Controls({
             className={numInputClass}
           />
         </div>
-        <p className="text-[#3a3a5a] text-xs">
-          Mitglieder darunter gelten als inaktiv
-        </p>
+        <p className="text-[#3a3a5a] text-xs">{t("controls.threshold_hint")}</p>
       </div>
 
       {/* Start / Stop */}
@@ -110,19 +145,19 @@ export default function Controls({
           disabled={!chatInfo}
           className="w-full bg-[#4caf7c] hover:bg-[#3d9e6d] text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Analyse starten
+          {t("controls.start")}
         </button>
       ) : (
         <div className="flex gap-2">
           <div className="flex-1 flex items-center gap-2 bg-[#1e1e2e] rounded-lg px-3 py-2">
             <span className="inline-block w-2 h-2 rounded-full bg-[#7c6af7] animate-pulse" />
-            <span className="text-[#888aaa] text-sm">Analyse läuft…</span>
+            <span className="text-[#888aaa] text-sm">{t("controls.analyzing")}</span>
           </div>
           <button
             onClick={onStop}
             className="bg-[#e05555] hover:bg-[#c94444] text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors"
           >
-            Stopp
+            {t("controls.stop")}
           </button>
         </div>
       )}

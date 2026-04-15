@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { BotMember } from "../types";
 
 interface Props {
@@ -16,6 +17,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 export default function BotList({ bots, notABot, onToggleNotABot }: Props) {
+  const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -25,7 +27,7 @@ export default function BotList({ bots, notABot, onToggleNotABot }: Props) {
   if (bots.length === 0) {
     return (
       <div className="flex-1 bg-[#1e1e2e] rounded-xl flex items-center justify-center min-h-[8rem]">
-        <p className="text-[#3a3a5a] text-sm">Keine Bots im Kanal gefunden</p>
+        <p className="text-[#3a3a5a] text-sm">{t("bots.none_found")}</p>
       </div>
     );
   }
@@ -55,19 +57,19 @@ export default function BotList({ bots, notABot, onToggleNotABot }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[#888aaa] text-xs">
-        {visibleBots.length} Bot{visibleBots.length !== 1 ? "s" : ""} im Kanal (zeitraumunabhängig)
+        {t("bots.count_label", { count: visibleBots.length })}
       </p>
       <div className="overflow-auto max-h-[calc(100vh-420px)] rounded-xl border border-[#3a3a5a]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-[#2a2a3e]">
             <tr>
               <th className={thBase + " text-left"} onClick={() => handleSort("name")}>
-                Name <SortIcon active={sortKey === "name"} dir={sortDir} />
+                {t("table.name")} <SortIcon active={sortKey === "name"} dir={sortDir} />
               </th>
               <th className={thBase + " text-left"} onClick={() => handleSort("username")}>
-                Username <SortIcon active={sortKey === "username"} dir={sortDir} />
+                {t("bots.username")} <SortIcon active={sortKey === "username"} dir={sortDir} />
               </th>
-              <th className={thBase + " text-right"}>User-ID</th>
+              <th className={thBase + " text-right"}>{t("bots.user_id")}</th>
               <th className={thBase + " text-right"} />
             </tr>
           </thead>
@@ -92,9 +94,9 @@ export default function BotList({ bots, notABot, onToggleNotABot }: Props) {
                   <button
                     onClick={() => onToggleNotABot(bot.user_id, bot.name)}
                     className="text-xs text-[#555570] hover:text-[#e05555] transition-colors whitespace-nowrap"
-                    title="Als 'Kein Bot' markieren"
+                    title={t("bots.not_a_bot")}
                   >
-                    ✕ Kein Bot
+                    {t("bots.not_a_bot")}
                   </button>
                 </td>
               </tr>
@@ -106,7 +108,7 @@ export default function BotList({ bots, notABot, onToggleNotABot }: Props) {
       {excludedBots.length > 0 && (
         <div className="flex flex-col gap-1">
           <p className="text-[#555570] text-xs">
-            Manuell als „Kein Bot" markiert ({excludedBots.length})
+            {t("bots.excluded_section", { count: excludedBots.length })}
           </p>
           <div className="rounded-xl border border-[#3a3a5a] overflow-hidden">
             <table className="w-full text-sm">
@@ -124,9 +126,9 @@ export default function BotList({ bots, notABot, onToggleNotABot }: Props) {
                       <button
                         onClick={() => onToggleNotABot(bot.user_id, bot.name)}
                         className="text-xs text-[#7c6af7] hover:text-[#a090ff] transition-colors whitespace-nowrap"
-                        title="Wiederherstellen"
+                        title={t("bots.restore")}
                       >
-                        ↩ Wiederherstellen
+                        {t("bots.restore")}
                       </button>
                     </td>
                   </tr>
