@@ -48,7 +48,7 @@ pub struct AnalysisResult {
     pub all_bots: Vec<BotMember>,
     pub own_is_admin: bool,
     pub own_can_get_participants: bool,
-    pub avg_poll_participation: f32,   // Ø Umfrage-Teilnahmen pro aktivem Teilnehmer
+    pub avg_poll_participants: f32,    // Ø eindeutige Voter pro Umfrage (nur echte Polls, keine Quizze)
     pub avg_quiz_participation: f32,   // Ø Quiz-Teilnahmen pro aktivem Teilnehmer
 }
 
@@ -189,8 +189,6 @@ pub async fn run_analysis(
     chat_url: &str,
     months: i32,
     include_reactions: bool,
-    include_polls: bool,
-    include_quizzes: bool,
     date_from: Option<String>,
     date_to: Option<String>,
     app: tauri::AppHandle,
@@ -287,6 +285,8 @@ pub async fn run_analysis(
     let mut total_messages: u32 = 0;
     let mut total_polls: u32 = 0;
     let mut total_quizzes: u32 = 0;
+    let mut total_poll_voters: u32 = 0; // Summe eindeutiger Voter über alle echten Polls
+    let mut unsupported_media_count: u32 = 0; // Nachrichten mit unbekanntem Media-Format
     let mut scanned: u32 = 0;
     let mut first_poll_date: Option<DateTime<Utc>> = None;
     let mut last_poll_date: Option<DateTime<Utc>> = None;
@@ -353,9 +353,15 @@ pub async fn run_analysis(
                 }
                 // Umfragen / Quizze erfassen und Teilnahmen zuordnen
                 if let tl::enums::Message::Message(raw_msg) = &msg.raw {
+                    // Nachrichten mit unbekanntem Medienformat zählen (z.B. Umfragen mit Bild,
+                    // neuer TL-Konstruktor den grammers noch nicht kennt)
+                    if matches!(&raw_msg.media, Some(tl::enums::MessageMedia::Unsupported)) {
+                        unsupported_media_count += 1;
+                    }
+
                     if let Some(tl::enums::MessageMedia::Poll(poll_media)) = &raw_msg.media {
-                        let is_quiz = match &poll_media.poll {
-                            tl::enums::Poll::Poll(p) => p.quiz,
+                        let (is_quiz, answers) = match &poll_media.poll {
+                            tl::enums::Poll::Poll(p) => (p.quiz, p.answers.clone()),
                         };
 
                         if is_quiz {
@@ -372,23 +378,40 @@ pub async fn run_analysis(
                             last_poll_date = Some(poll_dt);
                         }
 
-                        // Stimmen nur abrufen wenn der jeweilige Toggle aktiv ist
-                        let should_fetch = if is_quiz { include_quizzes } else { include_polls };
-                        if should_fetch {
+                        if is_quiz {
+                            // Quiz: alle Voter mit option=None abrufen, pro Mitglied zählen
                             let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
                             if let Ok(voter_ids) =
-                                fetch_poll_votes(&client, input_peer, msg.id()).await
+                                fetch_poll_votes(&client, input_peer, msg.id(), None).await
                             {
-                                // Deduplizieren: jeder Nutzer zählt max. 1× pro Abstimmung
                                 let unique: HashSet<i64> = voter_ids.into_iter().collect();
-                                for uid in unique {
-                                    if let Some(e) = activity.get_mut(&uid) {
-                                        if is_quiz {
-                                            e.5 += 1; // quiz_participations
-                                        } else {
-                                            e.4 += 1; // poll_participations
-                                        }
+                                for uid in &unique {
+                                    if let Some(e) = activity.get_mut(uid) {
+                                        e.5 += 1; // quiz_participations
                                     }
+                                }
+                            }
+                        } else {
+                            // Echte Umfrage: pro Antwortoption Voter abrufen und in einem
+                            // gemeinsamen Set deduplizieren → korrekte Unique-Voter-Zahl
+                            // auch bei Multi-Choice-Umfragen.
+                            let mut poll_voters: HashSet<i64> = HashSet::new();
+                            for answer in &answers {
+                                let opt_bytes = match answer {
+                                    tl::enums::PollAnswer::Answer(a) => a.option.clone(),
+                                };
+                                let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+                                if let Ok(ids) =
+                                    fetch_poll_votes(&client, input_peer, msg.id(), Some(opt_bytes))
+                                        .await
+                                {
+                                    poll_voters.extend(ids);
+                                }
+                            }
+                            total_poll_voters += poll_voters.len() as u32;
+                            for uid in &poll_voters {
+                                if let Some(e) = activity.get_mut(uid) {
+                                    e.4 += 1; // poll_participations
                                 }
                             }
                         }
@@ -416,6 +439,17 @@ pub async fn run_analysis(
             ),
         );
     }
+    if unsupported_media_count > 0 {
+        let _ = app.emit(
+            "log",
+            format!(
+                "⚠ {} Nachricht(en) mit unbekanntem Medienformat erkannt (möglicherweise Umfragen \
+                 mit Bild/Link). Diese konnten nicht ausgewertet werden. \
+                 Bitte die grammers-Bibliothek aktualisieren.",
+                unsupported_media_count
+            ),
+        );
+    }
     let _ = app.emit("progress", scanned);
 
     let mut members: Vec<MemberActivity> = activity
@@ -439,10 +473,9 @@ pub async fn run_analysis(
     members.sort_by(|a, b| b.message_count.cmp(&a.message_count));
     let members_with_messages = members.len() as u32;
 
-    // Ø Teilnehmer pro Umfrage = Gesamtstimmen / Anzahl Umfragen
-    let total_poll_participations: u32 = members.iter().map(|m| m.poll_participations).sum();
-    let avg_poll_participation: f32 = if total_polls > 0 {
-        total_poll_participations as f32 / total_polls as f32
+    // Ø eindeutige Voter pro Umfrage = Summe der Voter aller Polls / Anzahl Polls
+    let avg_poll_participants: f32 = if total_polls > 0 {
+        total_poll_voters as f32 / total_polls as f32
     } else {
         0.0
     };
@@ -468,7 +501,7 @@ pub async fn run_analysis(
         all_bots,
         own_is_admin,
         own_can_get_participants,
-        avg_poll_participation,
+        avg_poll_participants,
         avg_quiz_participation,
     })
 }
@@ -583,12 +616,13 @@ async fn collect_bots(
     Ok(bots)
 }
 
-/// Fetch all user IDs who voted in a poll message.  Errors are silently ignored
-/// by the caller — not all chats / poll types support GetPollVotes.
+/// Fetch all user IDs who voted for a specific poll option (or all options when
+/// `option` is None).  Errors are silently ignored by the caller.
 async fn fetch_poll_votes(
     client: &grammers_client::Client,
     input_peer: tl::enums::InputPeer,
     msg_id: i32,
+    option: Option<Vec<u8>>,
 ) -> Result<Vec<i64>, InvocationError> {
     let mut voter_ids = Vec::new();
     let mut offset: Option<String> = None;
@@ -598,7 +632,7 @@ async fn fetch_poll_votes(
             .invoke(&tl::functions::messages::GetPollVotes {
                 peer: input_peer.clone(),
                 id: msg_id,
-                option: None,
+                option: option.clone(),
                 offset: offset.clone(),
                 limit: 100,
             })

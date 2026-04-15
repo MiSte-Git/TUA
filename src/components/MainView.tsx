@@ -97,8 +97,6 @@ export default function MainView({
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
   const [dateTo, setDateTo] = useState<Date | null>(new Date());
   const [includeReactions, setIncludeReactions] = useState(false);
-  const [includePolls, setIncludePolls] = useState(true);
-  const [includeQuizzes, setIncludeQuizzes] = useState(false);
   const [minMessages, setMinMessages] = useState(1);
   const [minReactions, setMinReactions] = useState(0);
   const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
@@ -135,8 +133,6 @@ export default function MainView({
         chatUrl,
         months,
         includeReactions,
-        includePolls,
-        includeQuizzes,
         dateFrom: months === 0 ? (dateFrom ? dateFrom.toLocaleDateString("en-CA") : null) : null,
         dateTo: months === 0 ? (dateTo ? dateTo.toLocaleDateString("en-CA") : null) : null,
       });
@@ -206,7 +202,7 @@ export default function MainView({
   const totalMessages = members.reduce((sum, m) => sum + m.message_count, 0);
   const membersWithPollVotes = members.filter((m) => m.poll_participations > 0).length;
   const membersWithQuizVotes = members.filter((m) => m.quiz_participations > 0).length;
-  const avgPollParticipation = result?.avg_poll_participation ?? 0;
+  const avgPollParticipants = result?.avg_poll_participants ?? 0;
   const avgQuizParticipation = result?.avg_quiz_participation ?? 0;
   const allBotCount = result?.all_bots?.length ?? 0;
   const notABotInChannel = result
@@ -247,10 +243,6 @@ export default function MainView({
             analyzing={analyzing}
             includeReactions={includeReactions}
             onToggleReactions={setIncludeReactions}
-            includePolls={includePolls}
-            onTogglePolls={setIncludePolls}
-            includeQuizzes={includeQuizzes}
-            onToggleQuizzes={setIncludeQuizzes}
             minMessages={minMessages}
             minReactions={minReactions}
             onChangeMinMessages={setMinMessages}
@@ -324,14 +316,14 @@ export default function MainView({
                   value={fmt(membersWithPollVotes)}
                 />
               )}
-              {(result.total_polls_in_period ?? 0) > 0 && avgPollParticipation > 0 && (
+              {(result.total_polls_in_period ?? 0) > 0 && avgPollParticipants > 0 && (
                 <StatRow
                   label={
                     <Tooltip text={t("tooltips.avg_poll")}>
                       <span>{t("stats.avg_poll")}</span>
                     </Tooltip>
                   }
-                  value={avgPollParticipation.toFixed(1)}
+                  value={avgPollParticipants.toFixed(1)}
                 />
               )}
               {(result.total_quizzes_in_period ?? 0) > 0 && (
@@ -415,8 +407,6 @@ export default function MainView({
       <ResultsTable
         result={result}
         includeReactions={includeReactions}
-        includePolls={includePolls}
-        includeQuizzes={includeQuizzes}
         minMessages={minMessages}
         minReactions={minReactions}
         excludedMembers={excludedMembers}

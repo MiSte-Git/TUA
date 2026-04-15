@@ -54,10 +54,10 @@
   "tooltips": {
     "written": "Mitglieder, die im gewählten Zeitraum mindestens eine Nachricht geschrieben haben.",
     "truly_active": "Ergibt sich aus: Haben geschrieben – unter Schwellenwert – manuell ausgeschlossen.",
-    "total_polls": "Anzahl echter Abstimmungen (keine Quizze) im gewählten Zeitraum.",
+    "total_polls": "Anzahl echter Abstimmungen (keine Quizze) im gewählten Zeitraum. Umfragen mit angehängtem Bild oder Link nutzen ein neueres Telegram-Format, das von der grammers-Bibliothek noch nicht unterstützt wird – diese werden nicht mitgezählt.",
     "total_quizzes": "Anzahl Quiz-Umfragen im gewählten Zeitraum.",
     "poll_participants": "Anzahl der verschiedenen Teilnehmer an allen Umfragen im gewählten Zeitraum.",
-    "avg_poll": "Gesamtstimmen aller Mitglieder geteilt durch die Anzahl der Umfragen im gewählten Zeitraum.",
+    "avg_poll": "Durchschnittliche Teilnehmerzahl pro Umfrage (ohne Quizze).",
     "avg_quiz": "Gesamtstimmen aller Mitglieder geteilt durch die Anzahl der Quizze im gewählten Zeitraum.",
     "own_rights": "Zeigt ob du im Kanal Admin-Rechte hast. Als Admin kann die Teilnehmerliste abgerufen werden, was die Bot-Erkennung verbessert."
   },

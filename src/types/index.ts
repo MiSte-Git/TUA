@@ -50,7 +50,7 @@ export interface AnalysisResult {
   all_bots: BotMember[];
   own_is_admin: boolean;
   own_can_get_participants: boolean;
-  avg_poll_participation: number;
+  avg_poll_participants: number;
   avg_quiz_participation: number;
 }
 

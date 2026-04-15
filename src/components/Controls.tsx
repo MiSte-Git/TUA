@@ -9,10 +9,6 @@ interface Props {
   analyzing: boolean;
   includeReactions: boolean;
   onToggleReactions: (v: boolean) => void;
-  includePolls: boolean;
-  onTogglePolls: (v: boolean) => void;
-  includeQuizzes: boolean;
-  onToggleQuizzes: (v: boolean) => void;
   minMessages: number;
   minReactions: number;
   onChangeMinMessages: (v: number) => void;
@@ -54,10 +50,6 @@ export default function Controls({
   analyzing,
   includeReactions,
   onToggleReactions,
-  includePolls,
-  onTogglePolls,
-  includeQuizzes,
-  onToggleQuizzes,
   minMessages,
   minReactions,
   onChangeMinMessages,
@@ -80,30 +72,6 @@ export default function Controls({
         />
         <span className="text-[#e0e0f0] text-sm select-none">
           {t("controls.include_reactions")}
-        </span>
-      </div>
-
-      {/* Polls toggle */}
-      <div className="flex items-center gap-3">
-        <Toggle
-          checked={includePolls}
-          onChange={() => onTogglePolls(!includePolls)}
-          disabled={analyzing}
-        />
-        <span className="text-[#e0e0f0] text-sm select-none">
-          {t("controls.include_polls")}
-        </span>
-      </div>
-
-      {/* Quizzes toggle */}
-      <div className="flex items-center gap-3">
-        <Toggle
-          checked={includeQuizzes}
-          onChange={() => onToggleQuizzes(!includeQuizzes)}
-          disabled={analyzing}
-        />
-        <span className="text-[#e0e0f0] text-sm select-none">
-          {t("controls.include_quizzes")}
         </span>
       </div>
 

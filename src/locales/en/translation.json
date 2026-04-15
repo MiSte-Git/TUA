@@ -54,10 +54,10 @@
   "tooltips": {
     "written": "Members who wrote at least one message in the selected period.",
     "truly_active": "Calculated as: Wrote messages – below threshold – manually excluded.",
-    "total_polls": "Number of actual polls (no quizzes) in the selected period.",
+    "total_polls": "Number of actual polls (no quizzes) in the selected period. Polls with an attached image or link use a newer Telegram format not yet supported by the grammers library – these are not counted.",
     "total_quizzes": "Number of quiz polls in the selected period.",
     "poll_participants": "Number of distinct participants across all polls in the selected period.",
-    "avg_poll": "Total votes by all members divided by the number of polls in the selected period.",
+    "avg_poll": "Average number of participants per poll (quizzes excluded).",
     "avg_quiz": "Total votes by all members divided by the number of quizzes in the selected period.",
     "own_rights": "Shows whether you have admin rights in this channel. Admins can access participant lists, which improves bot detection."
   },

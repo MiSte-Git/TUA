@@ -5,8 +5,6 @@ import type { AnalysisResult, MemberActivity } from "../types";
 interface Props {
   result: AnalysisResult | null;
   includeReactions: boolean;
-  includePolls: boolean;
-  includeQuizzes: boolean;
   minMessages: number;
   minReactions: number;
   excludedMembers: Map<number, string>;
@@ -29,8 +27,6 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export default function ResultsTable({
   result,
   includeReactions,
-  includePolls,
-  includeQuizzes,
   minMessages,
   minReactions,
   excludedMembers,
@@ -73,8 +69,12 @@ export default function ResultsTable({
       : (bv as number) - (av as number);
   });
 
-  const hasPollVotes = includePolls && result.members.some((m) => m.poll_participations > 0);
-  const hasQuizVotes = includeQuizzes && result.members.some((m) => m.quiz_participations > 0);
+  const activeMembers   = sorted.filter((m) => !excludedMembers.has(m.user_id));
+  const disabledMembers = sorted.filter((m) =>  excludedMembers.has(m.user_id));
+  const displayMembers  = [...activeMembers, ...disabledMembers];
+
+  const hasPollVotes = result.members.some((m) => m.poll_participations > 0);
+  const hasQuizVotes = result.members.some((m) => m.quiz_participations > 0);
 
   const thBase =
     "px-3 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide cursor-pointer hover:text-[#e0e0f0] select-none whitespace-nowrap border-b border-[#3a3a5a]";
@@ -120,7 +120,7 @@ export default function ResultsTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((m, i) => {
+          {displayMembers.map((m, i) => {
             const excluded = excludedMembers.has(m.user_id);
             const active = isActive(m);
             const baseRow = excluded
