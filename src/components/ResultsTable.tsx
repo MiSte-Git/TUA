@@ -7,16 +7,23 @@ interface Props {
   includeReactions: boolean;
   minMessages: number;
   minReactions: number;
+  minPollParticipations: number;
   excludedMembers: Map<number, string>;
   onToggleExcluded: (userId: number, name: string) => void;
   notABot: Map<number, string>;
 }
 
-type SortKey = keyof Pick<MemberActivity, "name" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations">;
+type SortKey = keyof Pick<MemberActivity, "name" | "joined_date" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations">;
 type SortDir = "asc" | "desc";
 
 function fmt(n: number) {
   return n.toLocaleString("de-CH");
+}
+
+function fmtJoinDate(ts: number | null): string {
+  if (ts === null) return "–";
+  const d = new Date(ts * 1000);
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -29,6 +36,7 @@ export default function ResultsTable({
   includeReactions,
   minMessages,
   minReactions,
+  minPollParticipations,
   excludedMembers,
   onToggleExcluded,
   notABot,
@@ -46,7 +54,7 @@ export default function ResultsTable({
   }
 
   const isActive = (m: MemberActivity) =>
-    m.message_count > minMessages ||
+    m.message_count >= minMessages ||
     (minReactions > 0 && m.reaction_count >= minReactions);
 
   function handleSort(key: SortKey) {
@@ -64,13 +72,18 @@ export default function ResultsTable({
     if (typeof av === "string" && typeof bv === "string") {
       return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     }
+    if (av === null) return 1;
+    if (bv === null) return -1;
     return sortDir === "asc"
       ? (av as number) - (bv as number)
       : (bv as number) - (av as number);
   });
 
-  const activeMembers   = sorted.filter((m) => !excludedMembers.has(m.user_id));
-  const disabledMembers = sorted.filter((m) =>  excludedMembers.has(m.user_id));
+  const visible = sorted.filter(
+    (m) => m.message_count > 0 || m.poll_participations > 0 || m.reaction_count > 0
+  );
+  const activeMembers   = visible.filter((m) => !excludedMembers.has(m.user_id));
+  const disabledMembers = visible.filter((m) =>  excludedMembers.has(m.user_id));
   const displayMembers  = [...activeMembers, ...disabledMembers];
 
   const hasPollVotes = result.members.some((m) => m.poll_participations > 0);
@@ -80,12 +93,18 @@ export default function ResultsTable({
     "px-3 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide cursor-pointer hover:text-[#e0e0f0] select-none whitespace-nowrap border-b border-[#3a3a5a]";
 
   return (
-    <div className="overflow-auto max-h-[calc(100vh-400px)] rounded-xl border border-[#3a3a5a]">
+    <div
+      className="rounded-xl border border-[#3a3a5a]"
+      style={{ resize: "vertical", overflow: "auto", minHeight: "200px", height: "400px" }}
+    >
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-[#2a2a3e]">
           <tr>
             <th className={thBase + " text-left"} onClick={() => handleSort("name")}>
               {t("table.name")} <SortIcon active={sortKey === "name"} dir={sortDir} />
+            </th>
+            <th className={thBase + " text-right"} onClick={() => handleSort("joined_date")}>
+              {t("table.joined")} <SortIcon active={sortKey === "joined_date"} dir={sortDir} />
             </th>
             <th
               className={thBase + " text-right"}
@@ -165,6 +184,9 @@ export default function ResultsTable({
                     </div>
                   </div>
                 </td>
+                <td className={`px-3 py-2 text-right tabular-nums text-[#888aaa] text-xs ${textColor}`}>
+                  {fmtJoinDate(m.joined_date)}
+                </td>
                 <td
                   className={`px-3 py-2 text-right tabular-nums text-[#e0e0f0] ${textColor}`}
                 >
@@ -180,7 +202,10 @@ export default function ResultsTable({
                 {hasPollVotes && (
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${textColor} ${
-                      m.poll_participations === 0 ? "text-[#3a3a5a]" : "text-[#e0e0f0]"
+                      m.poll_participations === 0 ||
+                      (minPollParticipations > 0 && m.poll_participations < minPollParticipations)
+                        ? "text-[#3a3a5a]"
+                        : "text-[#e0e0f0]"
                     }`}
                   >
                     {fmt(m.poll_participations)}

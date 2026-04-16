@@ -24,6 +24,7 @@ export interface MemberActivity {
   user_id: number;
   name: string;
   username: string | null;
+  joined_date: number | null;
   message_count: number;
   reaction_count: number;
   poll_participations: number;

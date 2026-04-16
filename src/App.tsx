@@ -160,6 +160,7 @@ export default function App() {
             phase={phase}
             setPhase={setPhase}
             notABot={notABot}
+            clearLogs={() => setLogs([])}
             onSwitchToBotsTab={
               result && result.all_bots.length > 0
                 ? () => setActiveTab("bots")

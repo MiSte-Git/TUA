@@ -11,8 +11,10 @@ interface Props {
   onToggleReactions: (v: boolean) => void;
   minMessages: number;
   minReactions: number;
+  minPollParticipations: number;
   onChangeMinMessages: (v: number) => void;
   onChangeMinReactions: (v: number) => void;
+  onChangeMinPollParticipations: (v: number) => void;
 }
 
 function Toggle({
@@ -52,8 +54,10 @@ export default function Controls({
   onToggleReactions,
   minMessages,
   minReactions,
+  minPollParticipations,
   onChangeMinMessages,
   onChangeMinReactions,
+  onChangeMinPollParticipations,
 }: Props) {
   const { t } = useTranslation();
 
@@ -98,6 +102,19 @@ export default function Controls({
             value={minReactions}
             onChange={(e) =>
               onChangeMinReactions(Math.max(0, parseInt(e.target.value, 10) || 0))
+            }
+            disabled={analyzing}
+            className={numInputClass}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[#888aaa] text-sm">{t("controls.min_poll_participations")}</span>
+          <input
+            type="number"
+            min={0}
+            value={minPollParticipations}
+            onChange={(e) =>
+              onChangeMinPollParticipations(Math.max(0, parseInt(e.target.value, 10) || 0))
             }
             disabled={analyzing}
             className={numInputClass}

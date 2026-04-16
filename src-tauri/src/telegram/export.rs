@@ -58,12 +58,12 @@ pub fn export_csv(
     let b = result
         .members
         .iter()
-        .filter(|m| m.message_count <= min_messages)
+        .filter(|m| m.message_count < min_messages)
         .count() as u32;
     let c = result
         .members
         .iter()
-        .filter(|m| m.message_count > min_messages && excluded_ids.contains(&m.user_id))
+        .filter(|m| m.message_count >= min_messages && excluded_ids.contains(&m.user_id))
         .count() as u32;
     let active_count = a.saturating_sub(b).saturating_sub(c);
 
@@ -87,11 +87,11 @@ pub fn export_csv(
     }
     wtr.write_record(&[format!("# Mitglieder mit Nachrichten: {}", a)])?;
     wtr.write_record(&[format!(
-        "# davon <= Schwellenwert ({}): {}",
+        "# davon < Schwellenwert ({}): {}",
         min_messages, b
     )])?;
     if c > 0 {
-        wtr.write_record(&[format!("# manuell ausgeschlossen (> Schwellenwert): {}", c)])?;
+        wtr.write_record(&[format!("# manuell ausgeschlossen (>= Schwellenwert): {}", c)])?;
     }
     wtr.write_record(&[format!("# Aktive Mitglieder: {}", active_count)])?;
     wtr.write_record(&[format!("# Mindest-Nachrichten: {}", min_messages)])?;
@@ -104,10 +104,10 @@ pub fn export_csv(
         "user_id",
         "name",
         "username",
+        "joined_date",
         "message_count",
         "reaction_count",
         "poll_participations",
-        "quiz_participations",
         "is_bot",
         "active",
         "excluded",
@@ -117,16 +117,19 @@ pub fn export_csv(
     for member in &result.members {
         let is_excluded = excluded_ids.contains(&member.user_id);
         // active = above threshold AND not excluded (mirrors UI trulyActive logic)
-        let is_active = member.message_count > min_messages && !is_excluded;
+        let is_active = member.message_count >= min_messages && !is_excluded;
 
         wtr.write_record(&[
             member.user_id.to_string(),
             member.name.clone(),
             member.username.clone().unwrap_or_default(),
+            member.joined_date
+                .and_then(|ts| chrono::NaiveDateTime::from_timestamp_opt(ts, 0))
+                .map(|dt| dt.format("%Y-%m-%d").to_string())
+                .unwrap_or_default(),
             member.message_count.to_string(),
             member.reaction_count.to_string(),
             member.poll_participations.to_string(),
-            member.quiz_participations.to_string(),
             member.is_bot.to_string(),
             is_active.to_string(),
             is_excluded.to_string(),

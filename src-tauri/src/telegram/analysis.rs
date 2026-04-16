@@ -27,6 +27,7 @@ pub struct MemberActivity {
     pub user_id: i64,
     pub name: String,
     pub username: Option<String>,
+    pub joined_date: Option<i64>, // Unix timestamp; None when not available (creator, non-admin fetch)
     pub message_count: u32,
     pub reaction_count: u32,
     pub poll_participations: u32,
@@ -109,19 +110,19 @@ fn chat_info_from_peer(peer: &grammers_client::peer::Peer) -> ChatInfo {
     use grammers_client::peer::Peer;
     match peer {
         Peer::Channel(channel) => ChatInfo {
-            id: channel.id().bare_id(),
+            id: channel.id().bare_id().expect("invalid peer id"),
             title: channel.title().to_string(),
             username: channel.username().map(str::to_string),
             member_count: channel.raw.participants_count,
         },
         Peer::Group(group) => ChatInfo {
-            id: group.id().bare_id(),
+            id: group.id().bare_id().expect("invalid peer id"),
             title: group.title().unwrap_or("Unknown").to_string(),
             username: group.username().map(str::to_string),
             member_count: None,
         },
         Peer::User(user) => ChatInfo {
-            id: user.id().bare_id(),
+            id: user.id().bare_id().expect("invalid peer id"),
             title: user.full_name(),
             username: user.username().map(str::to_string),
             member_count: None,
@@ -165,7 +166,7 @@ pub async fn resolve_chat(chat_url: &str) -> Result<ChatInfo, AnalysisError> {
             .ok_or_else(|| AnalysisError::ChatNotFound(name))?,
         ChatIdentifier::ChannelId(id) => {
             let peer_ref = PeerRef {
-                id: PeerId::channel(id),
+                id: PeerId::channel(id).expect("invalid channel id"),
                 auth: PeerAuth::default(),
             };
             client
@@ -210,7 +211,7 @@ pub async fn run_analysis(
         ChatIdentifier::ChannelId(id) => {
             let _ = app.emit("log", format!("Kanal {} wird aufgelöst…", id));
             let peer_ref = PeerRef {
-                id: PeerId::channel(id),
+                id: PeerId::channel(id).expect("invalid channel id"),
                 auth: PeerAuth::default(),
             };
             let peer = client
@@ -241,6 +242,9 @@ pub async fn run_analysis(
     // Check own admin rights
     let (own_is_admin, own_can_get_participants) =
         check_own_permissions(&client, &peer_ref).await;
+
+    // Collect join dates (requires admin; silently returns empty map otherwise)
+    let join_dates = collect_join_dates(&client, &peer_ref).await;
 
     // Determine the scan window [cutoff, end_date]
     let (cutoff, end_date, period_from_str, period_to_str): (
@@ -286,6 +290,7 @@ pub async fn run_analysis(
     let mut total_polls: u32 = 0;
     let mut total_quizzes: u32 = 0;
     let mut total_poll_voters: u32 = 0; // Summe eindeutiger Voter über alle echten Polls
+    let mut global_unique_voters: HashSet<i64> = HashSet::new(); // globale Unique-Voter-Menge (für Debug)
     let mut unsupported_media_count: u32 = 0; // Nachrichten mit unbekanntem Media-Format
     let mut scanned: u32 = 0;
     let mut first_poll_date: Option<DateTime<Utc>> = None;
@@ -314,8 +319,8 @@ pub async fn run_analysis(
 
                 if let Some(sender_id) = msg.sender_id() {
                     // Only count actual user messages, not channel-signed posts
-                    if matches!(sender_id.kind(), PeerKind::User | PeerKind::UserSelf) {
-                        let uid = sender_id.bare_id();
+                    if matches!(sender_id.kind(), PeerKind::User) {
+                        let uid = sender_id.bare_id().expect("sender without id");
                         let name = msg
                             .sender()
                             .and_then(|p| p.name())
@@ -381,14 +386,19 @@ pub async fn run_analysis(
                         if is_quiz {
                             // Quiz: alle Voter mit option=None abrufen, pro Mitglied zählen
                             let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
-                            if let Ok(voter_ids) =
+                            if let Ok((voter_ids, voter_names)) =
                                 fetch_poll_votes(&client, input_peer, msg.id(), None).await
                             {
                                 let unique: HashSet<i64> = voter_ids.into_iter().collect();
                                 for uid in &unique {
-                                    if let Some(e) = activity.get_mut(uid) {
-                                        e.5 += 1; // quiz_participations
-                                    }
+                                    let entry = activity.entry(*uid).or_insert_with(|| {
+                                        let (name, username) = voter_names
+                                            .get(uid)
+                                            .cloned()
+                                            .unwrap_or_else(|| (format!("ID {}", uid), None));
+                                        (name, username, 0, 0, 0, 0)
+                                    });
+                                    entry.5 += 1; // quiz_participations
                                 }
                             }
                         } else {
@@ -396,23 +406,33 @@ pub async fn run_analysis(
                             // gemeinsamen Set deduplizieren → korrekte Unique-Voter-Zahl
                             // auch bei Multi-Choice-Umfragen.
                             let mut poll_voters: HashSet<i64> = HashSet::new();
+                            let mut all_voter_names: HashMap<i64, (String, Option<String>)> =
+                                HashMap::new();
                             for answer in &answers {
                                 let opt_bytes = match answer {
                                     tl::enums::PollAnswer::Answer(a) => a.option.clone(),
+                                    tl::enums::PollAnswer::InputPollAnswer(_) => continue,
                                 };
                                 let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
-                                if let Ok(ids) =
+                                if let Ok((ids, names)) =
                                     fetch_poll_votes(&client, input_peer, msg.id(), Some(opt_bytes))
                                         .await
                                 {
                                     poll_voters.extend(ids);
+                                    all_voter_names.extend(names);
                                 }
                             }
                             total_poll_voters += poll_voters.len() as u32;
+                            global_unique_voters.extend(&poll_voters);
                             for uid in &poll_voters {
-                                if let Some(e) = activity.get_mut(uid) {
-                                    e.4 += 1; // poll_participations
-                                }
+                                let entry = activity.entry(*uid).or_insert_with(|| {
+                                    let (name, username) = all_voter_names
+                                        .get(uid)
+                                        .cloned()
+                                        .unwrap_or_else(|| (format!("ID {}", uid), None));
+                                    (name, username, 0, 0, 0, 0)
+                                });
+                                entry.4 += 1; // poll_participations
                             }
                         }
                     }
@@ -462,6 +482,7 @@ pub async fn run_analysis(
                 user_id,
                 name,
                 username,
+                joined_date: join_dates.get(&user_id).copied(),
                 message_count,
                 reaction_count,
                 poll_participations,
@@ -471,7 +492,7 @@ pub async fn run_analysis(
         )
         .collect();
     members.sort_by(|a, b| b.message_count.cmp(&a.message_count));
-    let members_with_messages = members.len() as u32;
+    let members_with_messages = members.iter().filter(|m| m.message_count > 0).count() as u32;
 
     // Ø eindeutige Voter pro Umfrage = Summe der Voter aller Polls / Anzahl Polls
     let avg_poll_participants: f32 = if total_polls > 0 {
@@ -479,7 +500,6 @@ pub async fn run_analysis(
     } else {
         0.0
     };
-
     // Ø Teilnehmer pro Quiz = Gesamtstimmen / Anzahl Quizze
     let total_quiz_participations: u32 = members.iter().map(|m| m.quiz_participations).sum();
     let avg_quiz_participation: f32 = if total_quizzes > 0 {
@@ -504,6 +524,79 @@ pub async fn run_analysis(
         avg_poll_participants,
         avg_quiz_participation,
     })
+}
+
+/// Fetch join dates (Unix timestamps) for all channel participants.
+/// Returns an empty map silently on error (e.g. when not admin).
+async fn collect_join_dates(
+    client: &grammers_client::Client,
+    peer_ref: &PeerRef,
+) -> HashMap<i64, i64> {
+    let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+    let input_channel = match input_peer {
+        tl::enums::InputPeer::Channel(c) => tl::enums::InputChannel::Channel(
+            tl::types::InputChannel {
+                channel_id: c.channel_id,
+                access_hash: c.access_hash,
+            },
+        ),
+        _ => return HashMap::new(),
+    };
+
+    let mut join_dates: HashMap<i64, i64> = HashMap::new();
+    let mut offset = 0i32;
+    let limit = 200i32;
+
+    loop {
+        let result = match client
+            .invoke(&tl::functions::channels::GetParticipants {
+                channel: input_channel.clone(),
+                filter: tl::enums::ChannelParticipantsFilter::ChannelParticipantsSearch(
+                    tl::types::ChannelParticipantsSearch { q: String::new() },
+                ),
+                offset,
+                limit,
+                hash: 0,
+            })
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => break,
+        };
+
+        let (batch_count, participants) = match result {
+            tl::enums::channels::ChannelParticipants::Participants(list) => {
+                (list.participants.len(), list.participants)
+            }
+            tl::enums::channels::ChannelParticipants::NotModified => break,
+        };
+
+        if batch_count == 0 {
+            break;
+        }
+
+        for participant in participants {
+            match participant {
+                tl::enums::ChannelParticipant::Participant(p) => {
+                    join_dates.insert(p.user_id, p.date as i64);
+                }
+                tl::enums::ChannelParticipant::Admin(a) => {
+                    join_dates.insert(a.user_id, a.date as i64);
+                }
+                tl::enums::ChannelParticipant::Creator(_) => {
+                    // Creator has no join date in the Telegram API
+                }
+                _ => {}
+            }
+        }
+
+        if batch_count < limit as usize {
+            break;
+        }
+        offset += batch_count as i32;
+    }
+
+    join_dates
 }
 
 /// Check whether the signed-in account is an admin (or creator) of the channel.
@@ -616,15 +709,18 @@ async fn collect_bots(
     Ok(bots)
 }
 
-/// Fetch all user IDs who voted for a specific poll option (or all options when
-/// `option` is None).  Errors are silently ignored by the caller.
+/// Fetch all user IDs (and their names) who voted for a specific poll option
+/// (or all options when `option` is None).  Errors are silently ignored by the caller.
+/// Returns `(voter_ids, name_map)` where `name_map` maps each user_id to
+/// `(display_name, username)` using the user data included in the API response.
 async fn fetch_poll_votes(
     client: &grammers_client::Client,
     input_peer: tl::enums::InputPeer,
     msg_id: i32,
     option: Option<Vec<u8>>,
-) -> Result<Vec<i64>, InvocationError> {
+) -> Result<(Vec<i64>, HashMap<i64, (String, Option<String>)>), InvocationError> {
     let mut voter_ids = Vec::new();
+    let mut voter_names: HashMap<i64, (String, Option<String>)> = HashMap::new();
     let mut offset: Option<String> = None;
 
     loop {
@@ -651,13 +747,29 @@ async fn fetch_poll_votes(
             }
         }
 
+        // Collect display name + username from the user objects in this page
+        for user in list.users {
+            if let tl::enums::User::User(u) = user {
+                let name = match (
+                    u.first_name.as_deref().filter(|s| !s.is_empty()),
+                    u.last_name.as_deref().filter(|s| !s.is_empty()),
+                ) {
+                    (Some(f), Some(l)) => format!("{} {}", f, l),
+                    (Some(f), None) => f.to_string(),
+                    (None, Some(l)) => l.to_string(),
+                    (None, None) => format!("ID {}", u.id),
+                };
+                voter_names.insert(u.id, (name, u.username));
+            }
+        }
+
         match list.next_offset {
             Some(next) => offset = Some(next),
             None => break,
         }
     }
 
-    Ok(voter_ids)
+    Ok((voter_ids, voter_names))
 }
 
 /// Fetch all reaction peers for a single message.

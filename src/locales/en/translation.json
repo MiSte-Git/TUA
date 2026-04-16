@@ -20,6 +20,7 @@
     "include_quizzes": "Include Quizzes",
     "min_messages": "Min. Messages",
     "min_reactions": "Min. Reactions",
+    "min_poll_participations": "Min. Poll Participations",
     "threshold_hint": "Members below threshold are considered inactive",
     "start": "Start Analysis",
     "analyzing": "Analysis running…",
@@ -29,7 +30,7 @@
     "label": "Statistics",
     "total_members": "Total members",
     "written": "Wrote messages",
-    "below_threshold": "≤ {{count}} messages",
+    "below_threshold": "< {{count}} messages",
     "inactive": "(→ inactive)",
     "excluded": "Manually excluded",
     "truly_active": "Truly active",
@@ -52,9 +53,9 @@
     "export_csv": "↓ Export CSV"
   },
   "tooltips": {
-    "written": "Members who wrote at least one message in the selected period.",
-    "truly_active": "Calculated as: Wrote messages – below threshold – manually excluded.",
-    "total_polls": "Number of actual polls (no quizzes) in the selected period. Polls with an attached image or link use a newer Telegram format not yet supported by the grammers library – these are not counted.",
+    "written": "Members who wrote at least {{count}} message(s) in the selected period.",
+    "truly_active": "Calculated as: Wrote messages minus members with fewer than {{count}} messages minus manually excluded.",
+    "total_polls": "Number of polls (no quizzes) in the selected period.",
     "total_quizzes": "Number of quiz polls in the selected period.",
     "poll_participants": "Number of distinct participants across all polls in the selected period.",
     "avg_poll": "Average number of participants per poll (quizzes excluded).",
@@ -64,6 +65,7 @@
   "table": {
     "no_results": "No analysis run yet",
     "name": "Name",
+    "joined": "Joined",
     "messages": "Messages",
     "reactions": "Reactions",
     "polls": "Polls",

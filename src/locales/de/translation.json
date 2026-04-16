@@ -20,6 +20,7 @@
     "include_quizzes": "Quizze einbeziehen",
     "min_messages": "Mindest-Nachrichten",
     "min_reactions": "Mindest-Reaktionen",
+    "min_poll_participations": "Mindest-Umfragen-Teilnahmen",
     "threshold_hint": "Mitglieder darunter gelten als inaktiv",
     "start": "Analyse starten",
     "analyzing": "Analyse läuft…",
@@ -29,7 +30,7 @@
     "label": "Statistik",
     "total_members": "Mitglieder gesamt",
     "written": "Haben geschrieben",
-    "below_threshold": "≤ {{count}} Nachrichten",
+    "below_threshold": "< {{count}} Nachrichten",
     "inactive": "(→ inaktiv)",
     "excluded": "Manuell ausgeschlossen",
     "truly_active": "Wirklich aktiv",
@@ -52,9 +53,9 @@
     "export_csv": "↓ CSV exportieren"
   },
   "tooltips": {
-    "written": "Mitglieder, die im gewählten Zeitraum mindestens eine Nachricht geschrieben haben.",
-    "truly_active": "Ergibt sich aus: Haben geschrieben – unter Schwellenwert – manuell ausgeschlossen.",
-    "total_polls": "Anzahl echter Abstimmungen (keine Quizze) im gewählten Zeitraum. Umfragen mit angehängtem Bild oder Link nutzen ein neueres Telegram-Format, das von der grammers-Bibliothek noch nicht unterstützt wird – diese werden nicht mitgezählt.",
+    "written": "Mitglieder, die im gewählten Zeitraum mindestens {{count}} Nachricht(en) geschrieben haben.",
+    "truly_active": "Ergibt sich aus: Haben geschrieben minus Mitglieder mit weniger als {{count}} Nachrichten minus manuell ausgeschlossen.",
+    "total_polls": "Anzahl der Umfragen (ohne Quizze) im gewählten Zeitraum.",
     "total_quizzes": "Anzahl Quiz-Umfragen im gewählten Zeitraum.",
     "poll_participants": "Anzahl der verschiedenen Teilnehmer an allen Umfragen im gewählten Zeitraum.",
     "avg_poll": "Durchschnittliche Teilnehmerzahl pro Umfrage (ohne Quizze).",
@@ -64,6 +65,7 @@
   "table": {
     "no_results": "Noch keine Analyse durchgeführt",
     "name": "Name",
+    "joined": "Beitritt",
     "messages": "Nachrichten",
     "reactions": "Reaktionen",
     "polls": "Umfragen",

@@ -18,6 +18,7 @@ interface Props {
   phase: AppPhase;
   setPhase: (p: AppPhase) => void;
   notABot: Map<number, string>;
+  clearLogs: () => void;
   onSwitchToBotsTab?: () => void;
 }
 
@@ -90,6 +91,7 @@ export default function MainView({
   setScannedMessages,
   setPhase,
   notABot,
+  clearLogs,
   onSwitchToBotsTab,
 }: Props) {
   const { t } = useTranslation();
@@ -99,6 +101,7 @@ export default function MainView({
   const [includeReactions, setIncludeReactions] = useState(false);
   const [minMessages, setMinMessages] = useState(1);
   const [minReactions, setMinReactions] = useState(0);
+  const [minPollParticipations, setMinPollParticipations] = useState(0);
   const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
   const [analyzing, setAnalyzing] = useState(false);
   const cancelledRef = useRef(false);
@@ -125,6 +128,7 @@ export default function MainView({
 
   async function handleStart() {
     cancelledRef.current = false;
+    clearLogs();
     setAnalyzing(true);
     setPhase("analyzing");
     setProgress(0);
@@ -189,7 +193,7 @@ export default function MainView({
   const totalMembers = chatInfo?.member_count ?? members.length;
 
   const A = result?.members_with_messages ?? 0;
-  const B = members.filter((m) => m.message_count <= minMessages).length;
+  const B = members.filter((m) => m.message_count > 0 && m.message_count < minMessages).length;
   const C = members.filter(
     (m) => m.message_count > minMessages && excludedMembers.has(m.user_id)
   ).length;
@@ -219,6 +223,7 @@ export default function MainView({
 
   return (
     <div className="flex-1 flex flex-col gap-4 min-h-0">
+
       {/* Period selector */}
       <div className="bg-[#2a2a3e] rounded-xl p-4">
         <PeriodSelector
@@ -229,178 +234,195 @@ export default function MainView({
           onChangeDates={(from, to) => { setDateFrom(from); setDateTo(to); }}
           disabled={analyzing}
         />
-
       </div>
 
-      {/* Controls + Statistik */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-[#2a2a3e] rounded-xl p-4">
-          <Controls
-            chatInfo={chatInfo}
-            months={months}
-            onStart={handleStart}
-            onStop={handleStop}
-            analyzing={analyzing}
-            includeReactions={includeReactions}
-            onToggleReactions={setIncludeReactions}
-            minMessages={minMessages}
-            minReactions={minReactions}
-            onChangeMinMessages={setMinMessages}
-            onChangeMinReactions={setMinReactions}
-          />
-        </div>
+      {/* Controls (full width, above Statistik) */}
+      <div className="bg-[#2a2a3e] rounded-xl p-4">
+        <Controls
+          chatInfo={chatInfo}
+          months={months}
+          onStart={handleStart}
+          onStop={handleStop}
+          analyzing={analyzing}
+          includeReactions={includeReactions}
+          onToggleReactions={setIncludeReactions}
+          minMessages={minMessages}
+          minReactions={minReactions}
+          minPollParticipations={minPollParticipations}
+          onChangeMinMessages={setMinMessages}
+          onChangeMinReactions={setMinReactions}
+          onChangeMinPollParticipations={setMinPollParticipations}
+        />
+      </div>
 
-        {/* Statistik */}
-        <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-2">
-          <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-            {t("stats.label")}
-          </p>
-          {result ? (
-            <>
-              <Divider />
-              <StatRow label={t("stats.total_members")} value={fmt(totalMembers)} />
-              <Divider />
-              <StatRow
-                label={
-                  <Tooltip text={t("tooltips.written")}>
-                    <span>{t("stats.written")}</span>
-                  </Tooltip>
-                }
-                value={fmt(A)}
-                badge={`(${writtenPercent}%)`}
-              />
-              {B > 0 && (
-                <StatRow
-                  label={t("stats.below_threshold", { count: minMessages })}
-                  value={`–${fmt(B)}`}
-                  badge={t("stats.inactive")}
-                />
-              )}
-              {C > 0 && (
-                <StatRow
-                  label={t("stats.excluded")}
-                  value={`–${fmt(C)}`}
-                  badge={t("stats.inactive")}
-                />
-              )}
-              <Divider />
-              <StatRow
-                label={
-                  <Tooltip text={t("tooltips.truly_active")}>
-                    <span>{t("stats.truly_active")}</span>
-                  </Tooltip>
-                }
-                value={fmt(trulyActive)}
-                badge={`(${activePercent}%)`}
-                highlight
-              />
-              <Divider />
-              <StatRow label={t("stats.total_messages")} value={fmt(totalMessages)} />
-              {(result.total_polls_in_period ?? 0) > 0 && (
+      {/* Statistik (2 Spalten) */}
+      <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-2">
+        <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
+          {t("stats.label")}
+        </p>
+        {result ? (
+          <>
+            <div className="flex gap-0">
+              {/* Linke Spalte: Mitglieder-Aktivität */}
+              <div className="flex-1 flex flex-col gap-0 border-r border-[#2a2a3a] pr-5">
+                <StatRow label={t("stats.total_members")} value={fmt(totalMembers)} />
+                <Divider />
                 <StatRow
                   label={
-                    <Tooltip text={t("tooltips.total_polls")}>
-                      <span>{t("stats.total_polls")}</span>
+                    <Tooltip text={t("tooltips.written", { count: minMessages })}>
+                      <span>{t("stats.written")}</span>
                     </Tooltip>
                   }
-                  value={fmt(result.total_polls_in_period)}
+                  value={fmt(A)}
+                  badge={`(${writtenPercent}%)`}
                 />
-              )}
-              {membersWithPollVotes > 0 && (
+                {B > 0 && (
+                  <StatRow
+                    label={t("stats.below_threshold", { count: minMessages })}
+                    value={`–${fmt(B)}`}
+                    badge={t("stats.inactive")}
+                  />
+                )}
+                {C > 0 && (
+                  <StatRow
+                    label={t("stats.excluded")}
+                    value={`–${fmt(C)}`}
+                    badge={t("stats.inactive")}
+                  />
+                )}
+                <Divider />
                 <StatRow
                   label={
-                    <Tooltip text={t("tooltips.poll_participants")}>
-                      <span>{t("stats.poll_participants")}</span>
+                    <Tooltip text={t("tooltips.truly_active", { count: minMessages })}>
+                      <span>{t("stats.truly_active")}</span>
                     </Tooltip>
                   }
-                  value={fmt(membersWithPollVotes)}
+                  value={fmt(trulyActive)}
+                  badge={`(${activePercent}%)`}
+                  highlight
                 />
-              )}
-              {(result.total_polls_in_period ?? 0) > 0 && avgPollParticipants > 0 && (
-                <StatRow
-                  label={
-                    <Tooltip text={t("tooltips.avg_poll")}>
-                      <span>{t("stats.avg_poll")}</span>
-                    </Tooltip>
-                  }
-                  value={avgPollParticipants.toFixed(1)}
-                />
-              )}
-              {(result.total_quizzes_in_period ?? 0) > 0 && (
-                <StatRow
-                  label={
-                    <Tooltip text={t("tooltips.total_quizzes")}>
-                      <span>{t("stats.total_quizzes")}</span>
-                    </Tooltip>
-                  }
-                  value={fmt(result.total_quizzes_in_period)}
-                />
-              )}
-              {membersWithQuizVotes > 0 && (
-                <StatRow
-                  label={t("stats.quiz_participants")}
-                  value={fmt(membersWithQuizVotes)}
-                />
-              )}
-              {(result.total_quizzes_in_period ?? 0) > 0 && avgQuizParticipation > 0 && (
-                <StatRow
-                  label={
-                    <Tooltip text={t("tooltips.avg_quiz")}>
-                      <span>{t("stats.avg_quiz")}</span>
-                    </Tooltip>
-                  }
-                  value={avgQuizParticipation.toFixed(1)}
-                />
-              )}
-              {allBotCount > 0 && (
-                <div
-                  className={`flex items-baseline justify-between gap-2 py-0.5 ${
-                    onSwitchToBotsTab ? "cursor-pointer hover:opacity-80" : ""
-                  }`}
-                  onClick={onSwitchToBotsTab}
-                  title={onSwitchToBotsTab ? "Bot-Tab öffnen" : undefined}
-                >
-                  <span className="text-sm text-[#888aaa]">
-                    {t("stats.bots")}
-                    {notABotInChannel > 0 && (
-                      <span className="text-[#555570] ml-1">
-                        {t("stats.bots_excluded_hint", { count: notABotInChannel })}
+              </div>
+
+              {/* Rechte Spalte: Nachrichten, Umfragen, Bots */}
+              <div className="flex-1 flex flex-col gap-0 pl-5">
+                <StatRow label={t("stats.total_messages")} value={fmt(totalMessages)} />
+                {(result.total_polls_in_period ?? 0) > 0 && (
+                  <>
+                    <Divider />
+                    <StatRow
+                      label={
+                        <Tooltip text={t("tooltips.total_polls")}>
+                          <span>{t("stats.total_polls")}</span>
+                        </Tooltip>
+                      }
+                      value={fmt(result.total_polls_in_period)}
+                    />
+                    {membersWithPollVotes > 0 && (
+                      <StatRow
+                        label={
+                          <Tooltip text={t("tooltips.poll_participants")}>
+                            <span>{t("stats.poll_participants")}</span>
+                          </Tooltip>
+                        }
+                        value={fmt(membersWithPollVotes)}
+                      />
+                    )}
+                    {avgPollParticipants > 0 && (
+                      <StatRow
+                        label={
+                          <Tooltip text={t("tooltips.avg_poll")}>
+                            <span>{t("stats.avg_poll")}</span>
+                          </Tooltip>
+                        }
+                        value={avgPollParticipants.toFixed(1)}
+                      />
+                    )}
+                  </>
+                )}
+                {(result.total_quizzes_in_period ?? 0) > 0 && (
+                  <>
+                    <Divider />
+                    <StatRow
+                      label={
+                        <Tooltip text={t("tooltips.total_quizzes")}>
+                          <span>{t("stats.total_quizzes")}</span>
+                        </Tooltip>
+                      }
+                      value={fmt(result.total_quizzes_in_period)}
+                    />
+                    {membersWithQuizVotes > 0 && (
+                      <StatRow
+                        label={t("stats.quiz_participants")}
+                        value={fmt(membersWithQuizVotes)}
+                      />
+                    )}
+                    {avgQuizParticipation > 0 && (
+                      <StatRow
+                        label={
+                          <Tooltip text={t("tooltips.avg_quiz")}>
+                            <span>{t("stats.avg_quiz")}</span>
+                          </Tooltip>
+                        }
+                        value={avgQuizParticipation.toFixed(1)}
+                      />
+                    )}
+                  </>
+                )}
+                {allBotCount > 0 && (
+                  <>
+                    <Divider />
+                    <div
+                      className={`flex items-baseline justify-between gap-2 py-0.5 ${
+                        onSwitchToBotsTab ? "cursor-pointer hover:opacity-80" : ""
+                      }`}
+                      onClick={onSwitchToBotsTab}
+                      title={onSwitchToBotsTab ? "Bot-Tab öffnen" : undefined}
+                    >
+                      <span className="text-sm text-[#888aaa]">
+                        {t("stats.bots")}
+                        {notABotInChannel > 0 && (
+                          <span className="text-[#555570] ml-1">
+                            {t("stats.bots_excluded_hint", { count: notABotInChannel })}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="text-sm font-semibold text-[#e0e0f0] tabular-nums">
-                    {fmt(botCount)}
-                    {onSwitchToBotsTab && (
-                      <span className="text-[#7c6af7] ml-1 text-xs">→</span>
-                    )}
-                  </span>
-                </div>
-              )}
-              <StatRow
-                label={
-                  <Tooltip text={t("tooltips.own_rights")}>
-                    <span>{t("stats.own_rights")}</span>
-                  </Tooltip>
-                }
-                value={
-                  result.own_is_admin
-                    ? t("stats.own_rights_admin")
-                    : t("stats.own_rights_member")
-                }
-                highlight={result.own_is_admin}
-              />
-              <StatRow label={t("stats.period")} value={periodLabel} />
-              <button
-                onClick={handleExport}
-                className="mt-auto bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
-              >
-                {t("stats.export_csv")}
-              </button>
-            </>
-          ) : (
-            <p className="text-[#3a3a5a] text-sm">{t("stats.no_analysis")}</p>
-          )}
-        </div>
+                      <span className="text-sm font-semibold text-[#e0e0f0] tabular-nums">
+                        {fmt(botCount)}
+                        {onSwitchToBotsTab && (
+                          <span className="text-[#7c6af7] ml-1 text-xs">→</span>
+                        )}
+                      </span>
+                    </div>
+                  </>
+                )}
+                <Divider />
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.own_rights")}>
+                      <span>{t("stats.own_rights")}</span>
+                    </Tooltip>
+                  }
+                  value={
+                    result.own_is_admin
+                      ? t("stats.own_rights_admin")
+                      : t("stats.own_rights_member")
+                  }
+                  highlight={result.own_is_admin}
+                />
+                <StatRow label={t("stats.period")} value={periodLabel} />
+              </div>
+            </div>
+
+            <button
+              onClick={handleExport}
+              className="mt-2 bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
+            >
+              {t("stats.export_csv")}
+            </button>
+          </>
+        ) : (
+          <p className="text-[#3a3a5a] text-sm">{t("stats.no_analysis")}</p>
+        )}
       </div>
 
       {/* Results table */}
@@ -409,6 +431,7 @@ export default function MainView({
         includeReactions={includeReactions}
         minMessages={minMessages}
         minReactions={minReactions}
+        minPollParticipations={minPollParticipations}
         excludedMembers={excludedMembers}
         onToggleExcluded={handleToggleExcluded}
         notABot={notABot}

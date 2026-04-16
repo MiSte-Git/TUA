@@ -120,7 +120,7 @@ pub async fn find_first_mention(
 
     // Resolve peer from bare chat ID
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id),
+        id: PeerId::channel(chat_id).expect("invalid channel id"),
         auth: PeerAuth::default(),
     };
     let peer = client
@@ -310,7 +310,7 @@ async fn resolve_input_channel(
     chat_id: i64,
 ) -> Result<tl::enums::InputChannel, String> {
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id),
+        id: PeerId::channel(chat_id).expect("invalid channel id"),
         auth: PeerAuth::default(),
     };
     let peer = client

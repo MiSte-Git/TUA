@@ -12,7 +12,10 @@ export default function LogWindow({ logs }: Props) {
   }, [logs]);
 
   return (
-    <div className="bg-[#111120] rounded-xl p-3 h-40 overflow-y-auto font-mono text-sm text-[#a0ffa0] flex flex-col">
+    <div
+      className="bg-[#111120] rounded-xl p-3 font-mono text-sm text-[#a0ffa0] flex flex-col"
+      style={{ resize: "vertical", overflow: "auto", minHeight: "80px", height: "200px" }}
+    >
       {logs.length === 0 ? (
         <span className="text-[#3a3a5a] select-none">— Log leer —</span>
       ) : (
