@@ -23,10 +23,11 @@ interface Props {
 }
 
 const EXCLUDED_KEY = (chatId: number) => `excluded_members_${chatId}`;
+const ST_KEY = (chatId: number) => `st_members_${chatId}`;
 
-function loadExcluded(chatId: number): Map<number, string> {
+function loadMap(key: string): Map<number, string> {
   try {
-    const stored = localStorage.getItem(EXCLUDED_KEY(chatId));
+    const stored = localStorage.getItem(key);
     if (!stored) return new Map();
     const arr: { user_id: number; name: string }[] = JSON.parse(stored);
     return new Map(arr.map((e) => [e.user_id, e.name]));
@@ -35,9 +36,27 @@ function loadExcluded(chatId: number): Map<number, string> {
   }
 }
 
-function saveExcluded(chatId: number, map: Map<number, string>) {
+function saveMap(key: string, map: Map<number, string>) {
   const arr = Array.from(map.entries()).map(([user_id, name]) => ({ user_id, name }));
-  localStorage.setItem(EXCLUDED_KEY(chatId), JSON.stringify(arr));
+  localStorage.setItem(key, JSON.stringify(arr));
+}
+
+function loadExcluded(chatId: number) { return loadMap(EXCLUDED_KEY(chatId)); }
+function saveExcluded(chatId: number, map: Map<number, string>) { saveMap(EXCLUDED_KEY(chatId), map); }
+function loadST(chatId: number) { return loadMap(ST_KEY(chatId)); }
+function saveST(chatId: number, map: Map<number, string>) { saveMap(ST_KEY(chatId), map); }
+
+const LAST_EXPORT_DIR_KEY = "last_csv_export_dir";
+
+function loadLastExportDir(): string | null {
+  return localStorage.getItem(LAST_EXPORT_DIR_KEY);
+}
+
+function saveLastExportDir(filePath: string) {
+  const lastSep = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  if (lastSep > 0) {
+    localStorage.setItem(LAST_EXPORT_DIR_KEY, filePath.substring(0, lastSep));
+  }
 }
 
 function fmt(n: number) {
@@ -103,12 +122,14 @@ export default function MainView({
   const [minReactions, setMinReactions] = useState(0);
   const [minPollParticipations, setMinPollParticipations] = useState(0);
   const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
+  const [stMembers, setStMembers] = useState<Map<number, string>>(new Map());
   const [analyzing, setAnalyzing] = useState(false);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
     if (!chatInfo) return;
     setExcludedMembers(loadExcluded(chatInfo.id));
+    setStMembers(loadST(chatInfo.id));
   }, [chatInfo?.id]);
 
   function handleToggleExcluded(userId: number, name: string) {
@@ -119,9 +140,20 @@ export default function MainView({
       } else {
         next.set(userId, name);
       }
-      if (chatInfo) {
-        saveExcluded(chatInfo.id, next);
+      if (chatInfo) saveExcluded(chatInfo.id, next);
+      return next;
+    });
+  }
+
+  function handleToggleST(userId: number, name: string) {
+    setStMembers((prev) => {
+      const next = new Map(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.set(userId, name);
       }
+      if (chatInfo) saveST(chatInfo.id, next);
       return next;
     });
   }
@@ -169,11 +201,14 @@ export default function MainView({
       const suggested = await invoke<string>("suggested_filename", {
         chatInfo,
       });
+      const lastDir = loadLastExportDir();
+      const defaultPath = lastDir ? `${lastDir}/${suggested}` : suggested;
       const path = await save({
-        defaultPath: suggested,
+        defaultPath,
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (path) {
+        saveLastExportDir(path);
         await invoke("export_csv", {
           result,
           chatInfo,
@@ -181,6 +216,7 @@ export default function MainView({
           minMessages,
           minReactions,
           excludedIds: Array.from(excludedMembers.keys()),
+          stIds: Array.from(stMembers.keys()),
         });
       }
     } catch (_e) {
@@ -188,24 +224,51 @@ export default function MainView({
     }
   }
 
-  // ── Statistics calculations (A – B – C) ─────────────────────────────────────
+  // ── Statistics calculations ──────────────────────────────────────────────────
   const members = result?.members ?? [];
   const totalMembers = chatInfo?.member_count ?? members.length;
 
-  const A = result?.members_with_messages ?? 0;
-  const B = members.filter((m) => m.message_count > 0 && m.message_count < minMessages).length;
-  const C = members.filter(
-    (m) => m.message_count > minMessages && excludedMembers.has(m.user_id)
+  // Filter to current channel members only (excludes former members & external poll voters)
+  const currentMembers = members.filter((m) => m.is_current_member);
+
+  // A: all current members who wrote messages (including manually excluded)
+  const A = currentMembers.filter((m) => m.message_count > 0).length;
+  // B: current non-excluded members below threshold (but above 0)
+  const B = currentMembers.filter(
+    (m) => m.message_count > 0 && m.message_count < minMessages && !excludedMembers.has(m.user_id)
   ).length;
-  const trulyActive = A - B - C;
+  // C_total: all manually excluded current members
+  const C_total = currentMembers.filter((m) => excludedMembers.has(m.user_id)).length;
+  // trulyActive: current non-excluded members at or above threshold
+  const trulyActive = currentMembers.filter(
+    (m) => m.message_count >= minMessages && !excludedMembers.has(m.user_id)
+  ).length;
 
   const activePercent =
     totalMembers > 0 ? ((trulyActive / totalMembers) * 100).toFixed(1) : "0.0";
   const writtenPercent =
     totalMembers > 0 ? ((A / totalMembers) * 100).toFixed(1) : "0.0";
   const totalMessages = members.reduce((sum, m) => sum + m.message_count, 0);
-  const membersWithPollVotes = members.filter((m) => m.poll_participations > 0).length;
-  const membersWithQuizVotes = members.filter((m) => m.quiz_participations > 0).length;
+  const membersWithQuizVotes = currentMembers.filter((m) => m.quiz_participations > 0).length;
+
+  // ── ST stats ─────────────────────────────────────────────────────────────────
+  const stMembersList = currentMembers.filter((m) => stMembers.has(m.user_id));
+  const stCount = stMembersList.length;
+  const stActive = stMembersList.filter(
+    (m) => m.message_count >= minMessages && !excludedMembers.has(m.user_id)
+  ).length;
+  // Message totals (for ST %-share of messages, not member count)
+  const stTotalMessages = stMembersList.reduce((s, m) => s + m.message_count, 0);
+  const activeMessages = currentMembers
+    .filter((m) => m.message_count >= minMessages && !excludedMembers.has(m.user_id))
+    .reduce((s, m) => s + m.message_count, 0);
+  const stActiveMessages = stMembersList
+    .filter((m) => m.message_count >= minMessages && !excludedMembers.has(m.user_id))
+    .reduce((s, m) => s + m.message_count, 0);
+  // Poll participation totals
+  const stTotalPollParticipations = stMembersList.reduce((s, m) => s + m.poll_participations, 0);
+  const totalPollParticipations = currentMembers.reduce((s, m) => s + m.poll_participations, 0);
+  const totalPollsInPeriod = result?.total_polls_in_period ?? 0;
   const avgPollParticipants = result?.avg_poll_participants ?? 0;
   const avgQuizParticipation = result?.avg_quiz_participation ?? 0;
   const allBotCount = result?.all_bots?.length ?? 0;
@@ -278,15 +341,19 @@ export default function MainView({
                 />
                 {B > 0 && (
                   <StatRow
-                    label={t("stats.below_threshold", { count: minMessages })}
-                    value={`–${fmt(B)}`}
+                    label={
+                      <Tooltip text={t("tooltips.below_threshold", { count: minMessages })}>
+                        <span>{t("stats.below_threshold", { count: minMessages })}</span>
+                      </Tooltip>
+                    }
+                    value={fmt(B)}
                     badge={t("stats.inactive")}
                   />
                 )}
-                {C > 0 && (
+                {C_total > 0 && (
                   <StatRow
                     label={t("stats.excluded")}
-                    value={`–${fmt(C)}`}
+                    value={fmt(C_total)}
                     badge={t("stats.inactive")}
                   />
                 )}
@@ -317,16 +384,6 @@ export default function MainView({
                       }
                       value={fmt(result.total_polls_in_period)}
                     />
-                    {membersWithPollVotes > 0 && (
-                      <StatRow
-                        label={
-                          <Tooltip text={t("tooltips.poll_participants")}>
-                            <span>{t("stats.poll_participants")}</span>
-                          </Tooltip>
-                        }
-                        value={fmt(membersWithPollVotes)}
-                      />
-                    )}
                     {avgPollParticipants > 0 && (
                       <StatRow
                         label={
@@ -413,6 +470,62 @@ export default function MainView({
               </div>
             </div>
 
+            {/* ST-Statistik */}
+            {stMembers.size > 0 && (
+              <div className="border-t border-[#3a3a5a] pt-2 mt-1">
+                <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide mb-1">
+                  {t("stats.st_section")}
+                </p>
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.st_total")}>
+                      <span>{t("stats.st_total")}</span>
+                    </Tooltip>
+                  }
+                  value={`${fmt(stCount)} von ${fmt(totalMembers)}`}
+                  badge={totalMembers > 0 ? `(${((stCount / totalMembers) * 100).toFixed(1)}%)` : undefined}
+                />
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.st_truly_active", { count: minMessages })}>
+                      <span>{t("stats.st_truly_active")}</span>
+                    </Tooltip>
+                  }
+                  value={`${fmt(stActive)} von ${fmt(trulyActive)}`}
+                  badge={trulyActive > 0 ? `(${((stActive / trulyActive) * 100).toFixed(1)}%)` : undefined}
+                />
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.st_messages_total")}>
+                      <span>{t("stats.st_messages_total")}</span>
+                    </Tooltip>
+                  }
+                  value={fmt(totalMessages)}
+                  badge={totalMessages > 0 ? `davon ${((stTotalMessages / totalMessages) * 100).toFixed(1)}% ST` : undefined}
+                />
+                <StatRow
+                  label={
+                    <Tooltip text={t("tooltips.st_messages_active", { count: minMessages })}>
+                      <span>{t("stats.st_messages_active", { count: minMessages })}</span>
+                    </Tooltip>
+                  }
+                  value={fmt(activeMessages)}
+                  badge={activeMessages > 0 ? `davon ${((stActiveMessages / activeMessages) * 100).toFixed(1)}% ST` : undefined}
+                />
+                {totalPollsInPeriod > 0 && totalPollParticipations > 0 && (
+                  <StatRow
+                    label={
+                      <Tooltip text={t("tooltips.st_polls")}>
+                        <span>{t("stats.st_polls")}</span>
+                      </Tooltip>
+                    }
+                    value={fmt(totalPollParticipations)}
+                    badge={`davon ${((stTotalPollParticipations / totalPollParticipations) * 100).toFixed(1)}% ST`}
+                  />
+                )}
+              </div>
+            )}
+
             <button
               onClick={handleExport}
               className="mt-2 bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
@@ -435,6 +548,9 @@ export default function MainView({
         excludedMembers={excludedMembers}
         onToggleExcluded={handleToggleExcluded}
         notABot={notABot}
+        totalPollsInPeriod={totalPollsInPeriod}
+        stMembers={stMembers}
+        onToggleST={handleToggleST}
       />
     </div>
   );

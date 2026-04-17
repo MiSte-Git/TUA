@@ -32,7 +32,11 @@ pub struct MemberActivity {
     pub reaction_count: u32,
     pub poll_participations: u32,
     pub quiz_participations: u32,
+    pub last_message_date: Option<i64>,
+    pub last_reaction_date: Option<i64>,
+    pub last_poll_date: Option<i64>,
     pub is_bot: bool,
+    pub is_current_member: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -284,13 +288,12 @@ pub async fn run_analysis(
         ),
     );
 
-    // user_id → (name, username, message_count, reaction_count, poll_participations, quiz_participations)
-    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32, u32)> = HashMap::new();
+    // user_id → (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date)
+    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32, u32, Option<i64>, Option<i64>, Option<i64>)> = HashMap::new();
     let mut total_messages: u32 = 0;
     let mut total_polls: u32 = 0;
     let mut total_quizzes: u32 = 0;
-    let mut total_poll_voters: u32 = 0; // Summe eindeutiger Voter über alle echten Polls
-    let mut global_unique_voters: HashSet<i64> = HashSet::new(); // globale Unique-Voter-Menge (für Debug)
+    let mut total_poll_voters: u32 = 0; // Summe eindeutiger Voter über alle echten Polls (HashSet je Umfrage)
     let mut unsupported_media_count: u32 = 0; // Nachrichten mit unbekanntem Media-Format
     let mut scanned: u32 = 0;
     let mut first_poll_date: Option<DateTime<Utc>> = None;
@@ -335,8 +338,10 @@ pub async fn run_analysis(
                             }
                         });
 
-                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0, 0));
+                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0, 0, None, None, None));
+                        let msg_ts = msg.date().timestamp();
                         entry.2 += 1;
+                        entry.6 = Some(entry.6.map_or(msg_ts, |p| p.max(msg_ts)));
                         total_messages += 1;
 
                         // Fetch per-message reactions
@@ -349,6 +354,7 @@ pub async fn run_analysis(
                                         let reacting_uid = u.user_id;
                                         if let Some(e) = activity.get_mut(&reacting_uid) {
                                             e.3 += 1;
+                                            e.7 = Some(e.7.map_or(msg_ts, |p| p.max(msg_ts)));
                                         }
                                     }
                                 }
@@ -376,6 +382,7 @@ pub async fn run_analysis(
                         }
 
                         let poll_dt = msg.date();
+                        let poll_ts = poll_dt.timestamp();
                         if first_poll_date.map_or(true, |d| poll_dt > d) {
                             first_poll_date = Some(poll_dt);
                         }
@@ -396,9 +403,10 @@ pub async fn run_analysis(
                                             .get(uid)
                                             .cloned()
                                             .unwrap_or_else(|| (format!("ID {}", uid), None));
-                                        (name, username, 0, 0, 0, 0)
+                                        (name, username, 0, 0, 0, 0, None, None, None)
                                     });
                                     entry.5 += 1; // quiz_participations
+                                    entry.8 = Some(entry.8.map_or(poll_ts, |p| p.max(poll_ts)));
                                 }
                             }
                         } else {
@@ -423,16 +431,16 @@ pub async fn run_analysis(
                                 }
                             }
                             total_poll_voters += poll_voters.len() as u32;
-                            global_unique_voters.extend(&poll_voters);
                             for uid in &poll_voters {
                                 let entry = activity.entry(*uid).or_insert_with(|| {
                                     let (name, username) = all_voter_names
                                         .get(uid)
                                         .cloned()
                                         .unwrap_or_else(|| (format!("ID {}", uid), None));
-                                    (name, username, 0, 0, 0, 0)
+                                    (name, username, 0, 0, 0, 0, None, None, None)
                                 });
                                 entry.4 += 1; // poll_participations
+                                entry.8 = Some(entry.8.map_or(poll_ts, |p| p.max(poll_ts)));
                             }
                         }
                     }
@@ -477,7 +485,7 @@ pub async fn run_analysis(
         .map(
             |(
                 user_id,
-                (name, username, message_count, reaction_count, poll_participations, quiz_participations),
+                (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date),
             )| MemberActivity {
                 user_id,
                 name,
@@ -487,7 +495,11 @@ pub async fn run_analysis(
                 reaction_count,
                 poll_participations,
                 quiz_participations,
+                last_message_date,
+                last_reaction_date,
+                last_poll_date,
                 is_bot: bot_ids.contains(&user_id),
+                is_current_member: join_dates.is_empty() || join_dates.contains_key(&user_id),
             },
         )
         .collect();

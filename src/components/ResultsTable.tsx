@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnalysisResult, MemberActivity } from "../types";
+import Tooltip from "./Tooltip";
 
 interface Props {
   result: AnalysisResult | null;
@@ -11,9 +12,12 @@ interface Props {
   excludedMembers: Map<number, string>;
   onToggleExcluded: (userId: number, name: string) => void;
   notABot: Map<number, string>;
+  totalPollsInPeriod: number;
+  stMembers: Map<number, string>;
+  onToggleST: (userId: number, name: string) => void;
 }
 
-type SortKey = keyof Pick<MemberActivity, "name" | "joined_date" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations">;
+type SortKey = keyof Pick<MemberActivity, "name" | "joined_date" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations"> | "poll_pct";
 type SortDir = "asc" | "desc";
 
 function fmt(n: number) {
@@ -40,6 +44,9 @@ export default function ResultsTable({
   excludedMembers,
   onToggleExcluded,
   notABot,
+  totalPollsInPeriod,
+  stMembers,
+  onToggleST,
 }: Props) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>("message_count");
@@ -67,6 +74,11 @@ export default function ResultsTable({
   }
 
   const sorted = [...result.members].sort((a, b) => {
+    if (sortKey === "poll_pct") {
+      const av = totalPollsInPeriod > 0 ? a.poll_participations / totalPollsInPeriod : 0;
+      const bv = totalPollsInPeriod > 0 ? b.poll_participations / totalPollsInPeriod : 0;
+      return sortDir === "asc" ? av - bv : bv - av;
+    }
     const av = a[sortKey];
     const bv = b[sortKey];
     if (typeof av === "string" && typeof bv === "string") {
@@ -91,6 +103,8 @@ export default function ResultsTable({
 
   const thBase =
     "px-3 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide cursor-pointer hover:text-[#e0e0f0] select-none whitespace-nowrap border-b border-[#3a3a5a]";
+  const thST =
+    "px-2 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide select-none whitespace-nowrap border-b border-[#3a3a5a] text-center";
 
   return (
     <div
@@ -128,6 +142,14 @@ export default function ResultsTable({
                 {t("table.polls")} <SortIcon active={sortKey === "poll_participations"} dir={sortDir} />
               </th>
             )}
+            {hasPollVotes && totalPollsInPeriod > 0 && (
+              <th className={thBase + " text-right"} onClick={() => handleSort("poll_pct")}>
+                <Tooltip text={t("table.poll_pct_tooltip")} down>
+                  <span>{t("table.poll_pct")}</span>
+                </Tooltip>
+                {" "}<SortIcon active={sortKey === "poll_pct"} dir={sortDir} />
+              </th>
+            )}
             {hasQuizVotes && (
               <th
                 className={thBase + " text-right"}
@@ -136,14 +158,22 @@ export default function ResultsTable({
                 {t("table.quizzes")} <SortIcon active={sortKey === "quiz_participations"} dir={sortDir} />
               </th>
             )}
+            <th className={thST}>
+              <Tooltip text={t("table.st_tooltip")} down>
+                <span>{t("table.st")}</span>
+              </Tooltip>
+            </th>
           </tr>
         </thead>
         <tbody>
           {displayMembers.map((m, i) => {
             const excluded = excludedMembers.has(m.user_id);
+            const isST = stMembers.has(m.user_id);
             const active = isActive(m);
             const baseRow = excluded
               ? "bg-red-900/20 cursor-pointer"
+              : isST
+              ? "bg-[#4caf7c]/15 cursor-pointer hover:bg-[#4caf7c]/20"
               : i % 2 === 0
               ? "bg-[#2a2a3e] cursor-pointer hover:bg-[#333350]"
               : "bg-[#252535] cursor-pointer hover:bg-[#2e2e48]";
@@ -211,6 +241,17 @@ export default function ResultsTable({
                     {fmt(m.poll_participations)}
                   </td>
                 )}
+                {hasPollVotes && totalPollsInPeriod > 0 && (
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${textColor} ${
+                      m.poll_participations === 0 ? "text-[#3a3a5a]" : "text-[#888aaa]"
+                    }`}
+                  >
+                    {m.poll_participations === 0
+                      ? "–"
+                      : `${((m.poll_participations / totalPollsInPeriod) * 100).toFixed(1)} %`}
+                  </td>
+                )}
                 {hasQuizVotes && (
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${textColor} ${
@@ -220,6 +261,21 @@ export default function ResultsTable({
                     {fmt(m.quiz_participations)}
                   </td>
                 )}
+                <td
+                  className="px-2 py-2 text-center"
+                  onClick={(e) => { e.stopPropagation(); onToggleST(m.user_id, m.name); }}
+                  title={stMembers.has(m.user_id) ? t("table.st_unmark") : t("table.st_mark")}
+                >
+                  <span
+                    className={`text-xs font-bold select-none cursor-pointer ${
+                      stMembers.has(m.user_id)
+                        ? "text-[#7c6af7]"
+                        : "text-[#3a3a5a] hover:text-[#5a5a8a]"
+                    }`}
+                  >
+                    ST
+                  </span>
+                </td>
               </tr>
             );
           })}

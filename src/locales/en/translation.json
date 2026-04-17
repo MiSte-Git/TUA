@@ -29,10 +29,11 @@
   "stats": {
     "label": "Statistics",
     "total_members": "Total members",
-    "written": "Wrote messages",
-    "below_threshold": "< {{count}} messages",
+    "written": "Wrote messages (total)",
+    "below_threshold": "< {{count}} messages written",
     "inactive": "(→ inactive)",
     "excluded": "Manually excluded",
+    "excluded_above": "thereof ≥ {{count}} messages",
     "truly_active": "Truly active",
     "total_messages": "Total messages",
     "total_polls": "Polls in period",
@@ -50,17 +51,29 @@
     "period_months_one": "{{count}} Month",
     "period_months_other": "{{count}} Months",
     "no_analysis": "No analysis run yet",
-    "export_csv": "↓ Export CSV"
+    "export_csv": "↓ Export CSV",
+    "st_section": "Servant Team",
+    "st_total": "ST members",
+    "st_truly_active": "thereof truly active",
+    "st_messages_total": "Messages total",
+    "st_messages_active": "Messages ≥ {{count}}",
+    "st_polls": "Poll participations ST"
   },
   "tooltips": {
-    "written": "Members who wrote at least {{count}} message(s) in the selected period.",
-    "truly_active": "Calculated as: Wrote messages minus members with fewer than {{count}} messages minus manually excluded.",
+    "written": "Total number of current members who wrote at least one message in the period (including manually excluded).",
+    "below_threshold": "Non-excluded members who wrote messages in the period but did not reach the minimum threshold (→ considered inactive).",
+    "truly_active": "Current members with ≥ {{count}} messages minus manually excluded members with ≥ {{count}} messages.",
     "total_polls": "Number of polls (no quizzes) in the selected period.",
     "total_quizzes": "Number of quiz polls in the selected period.",
-    "poll_participants": "Number of distinct participants across all polls in the selected period.",
+    "poll_participants": "Number of current members who participated in at least one poll in the period.",
     "avg_poll": "Average number of participants per poll (quizzes excluded).",
     "avg_quiz": "Total votes by all members divided by the number of quizzes in the selected period.",
-    "own_rights": "Shows whether you have admin rights in this channel. Admins can access participant lists, which improves bot detection."
+    "own_rights": "Shows whether you have admin rights in this channel. Admins can access participant lists, which improves bot detection.",
+    "st_total": "Share of ST members in the total member count.",
+    "st_truly_active": "Share of ST members among truly active members (≥ {{count}} messages, not excluded).",
+    "st_messages_total": "Total messages in the period. Percentage share written by ST members.",
+    "st_messages_active": "Messages from members reaching the threshold. Percentage share from ST members.",
+    "st_polls": "Total poll participations in the period. Percentage share from ST members."
   },
   "table": {
     "no_results": "No analysis run yet",
@@ -69,9 +82,15 @@
     "messages": "Messages",
     "reactions": "Reactions",
     "polls": "Polls",
+    "poll_pct": "Polls %",
+    "poll_pct_tooltip": "Share of polls in the period this member participated in.",
     "quizzes": "Quizzes",
     "click_include": "Click to include",
-    "click_exclude": "Click to exclude"
+    "click_exclude": "Click to exclude",
+    "st": "ST",
+    "st_tooltip": "Servant Team – click to mark/unmark.",
+    "st_mark": "Mark as Servant Team",
+    "st_unmark": "Remove ST marking"
   },
   "bots": {
     "none_found": "No bots found in channel",

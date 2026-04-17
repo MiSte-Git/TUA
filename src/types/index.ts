@@ -29,7 +29,11 @@ export interface MemberActivity {
   reaction_count: number;
   poll_participations: number;
   quiz_participations: number;
+  last_message_date: number | null;
+  last_reaction_date: number | null;
+  last_poll_date: number | null;
   is_bot: boolean;
+  is_current_member: boolean;
 }
 
 export interface BotMember {
