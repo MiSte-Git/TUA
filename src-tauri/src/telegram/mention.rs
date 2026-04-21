@@ -1,9 +1,16 @@
 use chrono::{DateTime, Utc};
-use grammers_client::{tl, Client, InvocationError};
+use grammers_client::{tl, Client};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use grammers_session::types::{PeerAuth, PeerId, PeerRef};
 use tauri::Emitter;
-use tokio::time::{sleep, Duration};
+
+static CANCEL: AtomicBool = AtomicBool::new(false);
+
+/// Signal the running find_first_mention to abort.
+pub fn cancel() {
+    CANCEL.store(true, Ordering::Relaxed);
+}
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -19,10 +26,12 @@ pub struct ChatMember {
 pub struct FirstMentionResult {
     pub first_own_message: Option<String>, // ISO 8601
     pub first_mention: Option<String>,     // ISO 8601
-    pub first_seen: Option<String>,        // ISO 8601, min() of both
+    pub first_seen: Option<String>,        // ISO 8601, min() of all three
     pub message_context: Option<String>,   // message text, max 200 chars
     pub message_link: Option<String>,      // https://t.me/USERNAME/ID or https://t.me/c/CHAT_ID/ID
     pub found_in: String,                  // "own_message" | "mention" | "both" | "not_found"
+    pub joined_at: Option<String>,         // ISO 8601, current join date
+    pub joined_at_is_rejoin: bool,         // true when user was active before current join
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -115,10 +124,13 @@ pub async fn find_first_mention(
     username: String,
     app: &tauri::AppHandle,
 ) -> Result<FirstMentionResult, String> {
+    // Reset any leftover cancel flag from a previous aborted search
+    CANCEL.store(false, Ordering::Relaxed);
+
     // Normalize: strip leading @, lowercase
     let username = username.trim_start_matches('@').to_lowercase();
 
-    // Resolve peer from bare chat ID
+    // Resolve chat peer
     let init_ref = PeerRef {
         id: PeerId::channel(chat_id).expect("invalid channel id"),
         auth: PeerAuth::default(),
@@ -132,144 +144,79 @@ pub async fn find_first_mention(
         .await
         .ok_or("Could not obtain peer reference")?;
 
-    // ── Membership check ──────────────────────────────────────────────────────
-    let input_peer_check = tl::enums::InputPeer::from(peer_ref.clone());
-    if let tl::enums::InputPeer::Channel(c) = input_peer_check {
-        let input_channel = tl::enums::InputChannel::Channel(tl::types::InputChannel {
-            channel_id: c.channel_id,
-            access_hash: c.access_hash,
-        });
-        let search_result = client
-            .invoke(&tl::functions::channels::GetParticipants {
-                channel: input_channel,
-                filter: tl::enums::ChannelParticipantsFilter::ChannelParticipantsSearch(
-                    tl::types::ChannelParticipantsSearch {
-                        q: username.clone(),
-                    },
-                ),
-                offset: 0,
-                limit: 50,
-                hash: 0,
-            })
-            .await
-            .map_err(|e| e.to_string())?;
+    // ── Resolve user and extract InputPeer + user_id ──────────────────────────
+    let user_peer = client
+        .resolve_username(&username)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Benutzer @{} nicht gefunden", username))?;
+    let user_peer_ref = user_peer
+        .to_ref()
+        .await
+        .ok_or("Could not obtain user peer reference")?;
+    let user_input_peer = tl::enums::InputPeer::from(user_peer_ref);
+    let user_id: i64 = match &user_input_peer {
+        tl::enums::InputPeer::User(u) => u.user_id,
+        _ => return Err(format!("@{} ist kein Benutzer", username)),
+    };
 
-        if let tl::enums::channels::ChannelParticipants::Participants(list) = search_result {
-            let is_member = list.users.iter().any(|u| {
-                if let tl::enums::User::User(user) = u {
-                    user.username
-                        .as_ref()
-                        .map(|s| s.to_lowercase() == username)
-                        .unwrap_or(false)
-                } else {
-                    false
-                }
+    // ── Get participant join date via GetParticipant ───────────────────────────
+    let joined_at: Option<DateTime<Utc>> = {
+        let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
+        if let tl::enums::InputPeer::Channel(c) = input_peer {
+            let input_channel = tl::enums::InputChannel::Channel(tl::types::InputChannel {
+                channel_id: c.channel_id,
+                access_hash: c.access_hash,
             });
-            if !is_member {
-                return Err(format!(
-                    "User @{} ist kein Mitglied dieses Chats",
-                    username
-                ));
-            }
-        }
-        // NotModified → skip check (treat as valid)
-    }
-    // Regular groups (InputPeer::Chat) → skip membership check
-
-    let mut first_own_message: Option<DateTime<Utc>> = None;
-    let mut first_mention: Option<DateTime<Utc>> = None;
-    let mut message_context: Option<String> = None;
-    let mut message_link: Option<String> = None;
-
-    let mut msg_iter = client.iter_messages(peer_ref);
-    let mut scanned: u32 = 0;
-
-    loop {
-        // ── Fetch next message with retry on RPC 500 ─────────────────────────
-        let msg_opt = {
-            let mut attempt = 0u8;
-            loop {
-                match msg_iter.next().await {
-                    ok @ Ok(_) => break ok,
-                    Err(e) if is_rpc_500(&e) && attempt < 3 => {
-                        attempt += 1;
-                        let _ = app.emit(
-                            "log",
-                            format!("Telegram-Fehler, neuer Versuch in 5s… ({}/3)", attempt),
-                        );
-                        sleep(Duration::from_secs(5)).await;
-                    }
-                    Err(e) => {
-                        if attempt > 0 {
-                            let _ = app.emit(
-                                "log",
-                                format!("Fehler nach {} Versuchen: {}", attempt, e),
-                            );
+            match client
+                .invoke(&tl::functions::channels::GetParticipant {
+                    channel: input_channel,
+                    participant: user_input_peer.clone(),
+                })
+                .await
+            {
+                Ok(tl::enums::channels::ChannelParticipant::Participant(cp)) => {
+                    match &cp.participant {
+                        tl::enums::ChannelParticipant::Participant(p) => {
+                            DateTime::from_timestamp(p.date as i64, 0)
                         }
-                        break Err(e);
+                        tl::enums::ChannelParticipant::Admin(a) => {
+                            DateTime::from_timestamp(a.date as i64, 0)
+                        }
+                        tl::enums::ChannelParticipant::ParticipantSelf(p) => {
+                            DateTime::from_timestamp(p.date as i64, 0)
+                        }
+                        _ => None,
                     }
                 }
+                _ => None,
             }
-        };
-
-        match msg_opt {
-            Ok(Some(msg)) => {
-                scanned += 1;
-
-                // ── Progress log + batch pause every 1 000 messages ──────────
-                if scanned % 1000 == 0 {
-                    let _ = app.emit(
-                        "log",
-                        format!("Erste Erwähnung: {} Nachrichten durchsucht…", scanned),
-                    );
-                    sleep(Duration::from_millis(500)).await;
-                }
-
-                let msg_date = msg.date();
-                let msg_text = msg.text().to_string();
-
-                // Resolve sender username (lowercase)
-                let sender_username: Option<String> = msg.sender().and_then(|p| {
-                    use grammers_client::peer::Peer;
-                    if let Peer::User(u) = p {
-                        u.username().map(|s| s.to_lowercase())
-                    } else {
-                        None
-                    }
-                });
-
-                let is_own = sender_username.as_deref() == Some(username.as_str());
-
-                // a) Own message — always overwrite (newest→oldest ⇒ last write = oldest)
-                if is_own {
-                    first_own_message = Some(msg_date);
-                }
-
-                // b) @mention in someone else's message — always overwrite
-                if !is_own && contains_mention(&msg_text, &username) {
-                    first_mention = Some(msg_date);
-                    message_context = Some(msg_text.chars().take(200).collect());
-                    message_link = Some(build_link(&chat_username, chat_id, msg.id()));
-                }
-            }
-            Ok(None) => break,
-            Err(e) => return Err(e.to_string()),
+        } else {
+            None
         }
-    }
+    };
 
-    let _ = app.emit(
-        "log",
-        format!(
-            "Erste Erwähnung: {} Nachrichten insgesamt durchsucht.",
-            scanned
-        ),
-    );
+    // ── Search 1: own messages via server-side sender filter ─────────────────
+    let first_own_message =
+        find_oldest_own_message(client, peer_ref.clone(), user_input_peer.clone(), &username, app).await?;
 
-    let first_seen = match (first_own_message, first_mention) {
-        (Some(a), Some(b)) => Some(a.min(b)),
-        (Some(a), None) => Some(a),
-        (None, Some(b)) => Some(b),
-        (None, None) => None,
+    // ── Search 2: mentions via server-side text search ────────────────────────
+    let _ = app.emit("log", format!("Suche Erwähnungen von @{}…", username));
+    let (first_mention, message_context, message_link) =
+        find_oldest_mention(client, peer_ref, &chat_username, chat_id, &username, user_id, app)
+            .await?;
+
+    let _ = app.emit("log", "Suche abgeschlossen.".to_string());
+
+    let mut candidates: Vec<DateTime<Utc>> = vec![];
+    if let Some(d) = first_own_message { candidates.push(d); }
+    if let Some(d) = first_mention     { candidates.push(d); }
+    if let Some(d) = joined_at         { candidates.push(d); }
+    let first_seen = candidates.iter().min().copied();
+
+    let joined_at_is_rejoin = match (joined_at, first_seen) {
+        (Some(j), Some(e)) => j > e,
+        _ => false,
     };
 
     let found_in = match (first_own_message.is_some(), first_mention.is_some()) {
@@ -287,7 +234,168 @@ pub async fn find_first_mention(
         message_context,
         message_link,
         found_in,
+        joined_at: joined_at.map(|dt| dt.to_rfc3339()),
+        joined_at_is_rejoin,
     })
+}
+
+/// Search for the oldest message sent by `user_input_peer` using server-side
+/// sender filtering (`messages.Search` with `from_id`). Messages come newest-
+/// first; always overwriting `oldest` means the final value is the oldest match.
+async fn find_oldest_own_message(
+    client: &Client,
+    chat_peer_ref: PeerRef,
+    user_input_peer: tl::enums::InputPeer,
+    username: &str,
+    app: &tauri::AppHandle,
+) -> Result<Option<DateTime<Utc>>, String> {
+    let _ = app.emit(
+        "log",
+        format!("Starte Nachrichtensuche für @{}…", username),
+    );
+
+    let chat_input_peer = tl::enums::InputPeer::from(chat_peer_ref);
+    let mut oldest: Option<DateTime<Utc>> = None;
+    let mut count: u32 = 0;
+    let mut offset_id = 0i32;
+
+    loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            CANCEL.store(false, Ordering::Relaxed);
+            return Err("Abgebrochen".into());
+        }
+
+        let result = client
+            .invoke(&tl::functions::messages::Search {
+                peer: chat_input_peer.clone(),
+                q: String::new(),
+                from_id: Some(user_input_peer.clone()),
+                saved_peer_id: None,
+                saved_reaction: None,
+                top_msg_id: None,
+                filter: tl::enums::MessagesFilter::InputMessagesFilterEmpty,
+                min_date: 0,
+                max_date: 0,
+                offset_id,
+                add_offset: 0,
+                limit: 100,
+                max_id: 0,
+                min_id: 0,
+                hash: 0,
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let messages: Vec<tl::enums::Message> = match result {
+            tl::enums::messages::Messages::Messages(m) => m.messages,
+            tl::enums::messages::Messages::Slice(m) => m.messages,
+            tl::enums::messages::Messages::ChannelMessages(m) => m.messages,
+            tl::enums::messages::Messages::NotModified(_) => break,
+        };
+
+        if messages.is_empty() {
+            break;
+        }
+
+        let batch_len = messages.len();
+        let mut last_id = offset_id;
+
+        for msg in &messages {
+            if let tl::enums::Message::Message(m) = msg {
+                count += 1;
+                last_id = m.id;
+                if let Some(dt) = DateTime::from_timestamp(m.date as i64, 0) {
+                    oldest = Some(dt);
+                }
+                if count % 50 == 0 {
+                    let date_str = DateTime::from_timestamp(m.date as i64, 0)
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default();
+                    let _ = app.emit(
+                        "log",
+                        format!(
+                            "Geprüft: {} Nachrichten, aktuelles Datum: {}",
+                            count, date_str,
+                        ),
+                    );
+                }
+            }
+        }
+
+        if batch_len < 100 {
+            break;
+        }
+        offset_id = last_id;
+    }
+
+    let _ = app.emit(
+        "log",
+        format!("Suche beendet. {} eigene Nachrichten gefunden.", count),
+    );
+
+    Ok(oldest)
+}
+
+/// Find the oldest mention of `@username` by someone else using server-side
+/// text search (search_messages with query). Messages come newest-first;
+/// we always overwrite so the last assignment holds the oldest mention.
+async fn find_oldest_mention(
+    client: &Client,
+    chat_peer_ref: PeerRef,
+    chat_username: &Option<String>,
+    chat_id: i64,
+    username: &str,
+    user_id: i64,
+    app: &tauri::AppHandle,
+) -> Result<(Option<DateTime<Utc>>, Option<String>, Option<String>), String> {
+    let mut oldest: Option<DateTime<Utc>> = None;
+    let mut context: Option<String> = None;
+    let mut link: Option<String> = None;
+    let mut total: u32 = 0;
+
+    let mut iter = client
+        .search_messages(chat_peer_ref)
+        .query(&format!("@{}", username));
+
+    loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            CANCEL.store(false, Ordering::Relaxed);
+            return Err("Abgebrochen".into());
+        }
+
+        match iter.next().await {
+            Ok(Some(msg)) => {
+                // Skip messages sent by the searched user themselves
+                let is_own = msg
+                    .sender_id()
+                    .and_then(|p| p.bare_id())
+                    .map(|id| id == user_id)
+                    .unwrap_or(false);
+                if is_own {
+                    continue;
+                }
+
+                let text = msg.text().to_string();
+                if !contains_mention(&text, username) {
+                    continue;
+                }
+
+                // Newest-first → always overwrite; final value = oldest mention
+                oldest = Some(msg.date());
+                context = Some(text.chars().take(200).collect());
+                link = Some(build_link(chat_username, chat_id, msg.id()));
+
+                total += 1;
+                if total % 500 == 0 {
+                    let _ = app.emit("log", format!("Erwähnungen: {} gefunden…", total));
+                }
+            }
+            Ok(None) => break,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+
+    Ok((oldest, context, link))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -341,11 +449,6 @@ fn build_display_name(first: Option<&str>, last: Option<&str>, id: i64) -> Strin
         (None, Some(l)) => l.to_string(),
         (None, None) => format!("User {}", id),
     }
-}
-
-/// Returns true for transient Telegram server errors (RPC code 500).
-fn is_rpc_500(e: &InvocationError) -> bool {
-    matches!(e, InvocationError::Rpc(rpc) if rpc.code == 500)
 }
 
 /// Check whether `text` contains `@username` as a standalone mention.

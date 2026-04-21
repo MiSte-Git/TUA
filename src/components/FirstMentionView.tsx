@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
 import { useTranslation } from "react-i18next";
 import type { FirstMentionResult, ChatMember } from "../types";
+import { useElapsedTimer } from "../hooks/useElapsedTimer";
 
 interface Props {
   chatId?: number | null;
@@ -57,9 +58,48 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
 
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [finalDuration, setFinalDuration] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
+  const [cancelled, setCancelled] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const prevChatIdRef = useRef<number | null>(null);
+  const lastFormattedRef = useRef<string>("");
+  const wasLoading = useRef(false);
+
+  const { formatted } = useElapsedTimer(loading);
+  lastFormattedRef.current = formatted;
+
+  useEffect(() => {
+    if (loading) {
+      setFinalDuration(null);
+      wasLoading.current = true;
+    } else if (wasLoading.current) {
+      setFinalDuration(lastFormattedRef.current);
+      wasLoading.current = false;
+    }
+  }, [loading]);
+
+  // ── Reset all transient state when chatId changes ────────────────────────
+  useEffect(() => {
+    setUsername("");
+    setResult(null);
+    setError(null);
+    setSelectedMember(null);
+    setCancelled(false);
+    setFinalDuration(null);
+  }, [chatId]);
+
+  // ── Load search history when chatId changes ───────────────────────────────
+  useEffect(() => {
+    if (!chatId) return;
+    try {
+      const stored = localStorage.getItem(`first_mention_history_${chatId}`);
+      setHistory(stored ? JSON.parse(stored) : []);
+    } catch {
+      setHistory([]);
+    }
+  }, [chatId]);
 
   // ── Members progress listener ─────────────────────────────────────────────
   useEffect(() => {
@@ -123,23 +163,31 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
   }, [query, normalizedUsername, members]);
 
   const isExactSearch = query.startsWith("@") && normalizedUsername.length > 0;
-  const isNonMember =
-    isExactSearch && !memberMatch && !membersLoading && members.length > 0;
   const showDropdown = focused && filteredMembers.length > 0;
+  const showHistory = focused && query.length === 0 && history.length > 0;
 
-  // ── Comparison: is first_seen older than joined_at? ───────────────────────
-  const isEarlierThanJoined = useMemo(() => {
-    if (!result || !selectedMember?.joined_at || !result.first_seen) return false;
-    return new Date(result.first_seen) < new Date(selectedMember.joined_at);
-  }, [result, selectedMember]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  function saveToHistory(un: string) {
+    if (!chatId) return;
+    const entry = un.startsWith("@") ? un : `@${un}`;
+    const next = [entry, ...history.filter((h) => h !== entry)].slice(0, 10);
+    setHistory(next);
+    localStorage.setItem(`first_mention_history_${chatId}`, JSON.stringify(next));
+  }
+
+  function handleCancel() {
+    invoke("cancel_first_mention").catch(() => {});
+  }
+
   function selectMember(member: ChatMember) {
     const value = member.username ? `@${member.username}` : member.name;
     setUsername(value);
     setSelectedMember(member);
     setResult(null);
     setError(null);
+    setCancelled(false);
+    setFinalDuration(null);
     setFocused(false);
     setActiveIndex(-1);
   }
@@ -149,7 +197,9 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
     setLoading(true);
     setResult(null);
     setError(null);
+    setCancelled(false);
     setFocused(false);
+    saveToHistory(normalizedUsername);
     try {
       const res = await invoke<FirstMentionResult>("find_first_mention", {
         chatId,
@@ -158,7 +208,12 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
       });
       setResult(res);
     } catch (e) {
-      setError(String(e));
+      const msg = String(e);
+      if (msg.includes("Abgebrochen")) {
+        setCancelled(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -226,9 +281,11 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
               onChange={(e) => {
                 setUsername(e.target.value);
                 setActiveIndex(-1);
-                setSelectedMember(null); // clear member card on manual edit
+                setSelectedMember(null);
                 setResult(null);
                 setError(null);
+                setCancelled(false);
+                setFinalDuration(null);
               }}
               onFocus={() => setFocused(true)}
               onKeyDown={handleKeyDown}
@@ -242,7 +299,53 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
             >
               {loading ? t("first_mention.searching") : t("first_mention.search_button")}
             </button>
+            {loading && (
+              <button
+                onClick={handleCancel}
+                className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
+              >
+                ✕ Abbrechen
+              </button>
+            )}
           </div>
+
+          {/* History dropdown */}
+          {showHistory && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[#1e1e2e] border border-[#3a3a5c] rounded-lg z-20 overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.4)]">
+              {history.map((entry) => (
+                <div
+                  key={entry}
+                  className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[#2a2a3e] group"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setUsername(entry);
+                    setSelectedMember(null);
+                    setResult(null);
+                    setError(null);
+                    setCancelled(false);
+                    setFinalDuration(null);
+                  }}
+                >
+                  <span className="text-[#666888] text-xs shrink-0">🕐</span>
+                  <span className="text-[#e0e0f0] text-sm flex-1 truncate">{entry}</span>
+                  <button
+                    className="text-[#666888] hover:text-[#e05050] bg-transparent border-none cursor-pointer text-xs ml-auto shrink-0 px-1"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      const next = history.filter((h) => h !== entry);
+                      setHistory(next);
+                      localStorage.setItem(
+                        `first_mention_history_${chatId}`,
+                        JSON.stringify(next)
+                      );
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Autocomplete dropdown */}
           {showDropdown && (
@@ -279,15 +382,18 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
             ✓ Mitglied gefunden: {memberMatch.name}
           </p>
         )}
-        {isNonMember && (
-          <p className="text-red-400 text-xs">Kein Mitglied dieses Chats</p>
-        )}
-
-        {/* Loading / error for manual searches (no member card) */}
+        {/* Loading / status for manual searches (no member card) */}
         {!selectedMember && loading && (
-          <p className="text-[#888aaa] text-sm animate-pulse">
-            Durchsuche alle Nachrichten…
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-[#888aaa] text-sm animate-pulse">Durchsuche Nachrichten…</p>
+            <span className="text-yellow-400 text-xs tabular-nums font-mono">⏱ {formatted}</span>
+          </div>
+        )}
+        {!selectedMember && !loading && cancelled && (
+          <span className="text-yellow-400 text-xs">⚠ Suche abgebrochen {finalDuration ? `(nach ${finalDuration})` : ""}</span>
+        )}
+        {!selectedMember && !loading && finalDuration && !error && !cancelled && (
+          <span className="text-green-400 text-xs">✓ Abgeschlossen in {finalDuration}</span>
         )}
         {!selectedMember && error && (
           <p className="text-[#e05555] text-sm bg-[#1e1e2e] rounded-lg px-3 py-2">
@@ -331,10 +437,19 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
 
           {/* Loading */}
           {loading && (
-            <p className="text-[#888aaa] text-sm animate-pulse pt-1">
-              Durchsuche alle Nachrichten…
-            </p>
+            <div className="flex items-center gap-3 pt-1">
+              <p className="text-[#888aaa] text-sm animate-pulse">Durchsuche Nachrichten…</p>
+              <span className="text-yellow-400 text-xs tabular-nums font-mono">⏱ {formatted}</span>
+            </div>
           )}
+          {!loading && cancelled && (
+            <span className="text-yellow-400 text-xs pt-1">⚠ Suche abgebrochen {finalDuration ? `(nach ${finalDuration})` : ""}</span>
+          )}
+          {!loading && finalDuration && !error && !cancelled && (result ? (
+            <span className="text-green-400 text-xs">✓ Abgeschlossen in {finalDuration}</span>
+          ) : (
+            <span className="text-green-400 text-xs pt-1">✓ Abgeschlossen in {finalDuration}</span>
+          ))}
 
           {/* Error */}
           {error && (
@@ -347,57 +462,52 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
           {result && (
             <>
               <Divider />
-              {result.found_in === "not_found" ? (
+              {!result.first_seen ? (
                 <p className="text-[#888aaa] text-sm">
                   Keine Aktivität im Chatverlauf gefunden.
                 </p>
               ) : (
                 <>
-                  <Row
-                    label="Erste eigene Nachricht"
-                    value={fmtDate(result.first_own_message)}
-                  />
-                  <Row
-                    label="Erste Erwähnung"
-                    value={fmtDate(result.first_mention)}
-                  />
+                  <Row label="Erste eigene Nachricht" value={fmtDate(result.first_own_message)} />
+                  <Row label="Erste Erwähnung" value={fmtDate(result.first_mention)} />
+                  <Row label={t("first_mention.joined_at")} value={fmtDate(result.joined_at)} />
+                  {result.joined_at_is_rejoin && (
+                    <p className="text-yellow-500 text-xs italic">
+                      ⚠️ {t("first_mention.joined_at_rejoin")}
+                    </p>
+                  )}
                   <Divider />
 
-                  {isEarlierThanJoined ? (
-                    <>
-                      <Row
-                        label="⚠️ Frühester Nachweis"
-                        value={fmtDate(result.first_seen)}
-                        valueClass="text-orange-400 font-bold"
-                      />
-                      <p className="text-orange-400 text-xs">
-                        User war bereits vor letztem Beitritt aktiv
-                      </p>
+                  <Row
+                    label={result.joined_at_is_rejoin ? "⚠️ Frühester Nachweis" : "Frühester Nachweis"}
+                    value={fmtDate(result.first_seen)}
+                    valueClass={result.joined_at_is_rejoin ? "text-orange-400 font-bold" : "text-[#7c6af7] font-bold"}
+                  />
+                  {result.joined_at_is_rejoin && (
+                    <p className="text-[#888aaa] text-xs">{t("first_mention.rejoin_not_counted")}</p>
+                  )}
+                  {!result.joined_at_is_rejoin && result.found_in === "not_found" && result.joined_at && (
+                    <p className="text-[#888aaa] text-xs">{t("first_mention.earliest_is_joined")}</p>
+                  )}
 
-                      {result.message_context && (
-                        <>
-                          <Divider />
-                          <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-                            Kontext
-                          </p>
-                          <p className="text-[#888aaa] text-sm italic leading-relaxed bg-[#1e1e2e] rounded-lg px-3 py-2">
-                            „{result.message_context}"
-                          </p>
-                        </>
-                      )}
-                      {result.message_link && (
-                        <button
-                          onClick={() => open(result.message_link!)}
-                          className="mt-1 self-start bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
-                        >
-                          🔗 Zur Nachricht
-                        </button>
-                      )}
+                  {result.message_context && (
+                    <>
+                      <Divider />
+                      <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
+                        Kontext
+                      </p>
+                      <p className="text-[#888aaa] text-sm italic leading-relaxed bg-[#1e1e2e] rounded-lg px-3 py-2">
+                        „{result.message_context}"
+                      </p>
                     </>
-                  ) : (
-                    <p className="text-green-400 text-sm">
-                      ✓ Kein früherer Nachweis gefunden
-                    </p>
+                  )}
+                  {result.message_link && (
+                    <button
+                      onClick={() => open(result.message_link!)}
+                      className="mt-1 self-start bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
+                    >
+                      🔗 Zur Nachricht
+                    </button>
                   )}
                 </>
               )}
@@ -412,22 +522,31 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
           <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
             Erste Aktivität für @{normalizedUsername}
           </p>
-          {result.found_in === "not_found" ? (
+          {!result.first_seen ? (
             <p className="text-[#3a3a5a] text-sm pt-1">Keine Aktivität gefunden.</p>
           ) : (
             <>
               <Divider />
-              <Row
-                label="Erste eigene Nachricht"
-                value={fmtDate(result.first_own_message)}
-              />
+              <Row label="Erste eigene Nachricht" value={fmtDate(result.first_own_message)} />
               <Row label="Erste Erwähnung" value={fmtDate(result.first_mention)} />
+              <Row label={t("first_mention.joined_at")} value={fmtDate(result.joined_at)} />
+              {result.joined_at_is_rejoin && (
+                <p className="text-yellow-500 text-xs italic">
+                  ⚠️ {t("first_mention.joined_at_rejoin")}
+                </p>
+              )}
               <Divider />
               <Row
                 label="Frühester Nachweis"
                 value={fmtDate(result.first_seen)}
                 valueClass="text-[#7c6af7] font-bold"
               />
+              {result.joined_at_is_rejoin && (
+                <p className="text-[#888aaa] text-xs">{t("first_mention.rejoin_not_counted")}</p>
+              )}
+              {!result.joined_at_is_rejoin && result.found_in === "not_found" && result.joined_at && (
+                <p className="text-[#888aaa] text-xs">{t("first_mention.earliest_is_joined")}</p>
+              )}
               {result.message_context && (
                 <>
                   <Divider />

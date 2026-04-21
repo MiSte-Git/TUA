@@ -184,7 +184,7 @@ export default function App() {
 
         <LogWindow logs={logs} />
       </main>
-      <StatusBar connected={connected} progress={progress} scannedMessages={scannedMessages} />
+      <StatusBar connected={connected} progress={progress} scannedMessages={scannedMessages} analyzing={phase === "analyzing"} />
     </div>
   );
 }

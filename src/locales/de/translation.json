@@ -111,7 +111,11 @@
     "search_placeholder": "@username oder Name",
     "search_button": "Suchen",
     "searching": "Sucht…",
-    "members_loading": "Mitglieder werden geladen… ({{count}} bisher)"
+    "members_loading": "Mitglieder werden geladen… ({{count}} bisher)",
+    "joined_at": "Beitrittsdatum",
+    "joined_at_rejoin": "Entspricht dem letzten Beitritt. Frühere Eintritte sind über die Telegram API nicht abrufbar.",
+    "earliest_is_joined": "Frühester Nachweis basiert auf Beitrittsdatum",
+    "rejoin_not_counted": "Beitrittsdatum nicht berücksichtigt (Re-Join erkannt)"
   },
   "status": {
     "connected": "Verbunden",

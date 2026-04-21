@@ -77,6 +77,8 @@ export interface FirstMentionResult {
   message_context?: string | null;
   message_link?: string | null;
   found_in: "own_message" | "mention" | "both" | "not_found";
+  joined_at?: string | null;
+  joined_at_is_rejoin?: boolean;
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────

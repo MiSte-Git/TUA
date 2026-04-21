@@ -1,17 +1,35 @@
+import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useElapsedTimer } from "../hooks/useElapsedTimer";
 
 interface Props {
   connected: boolean;
   progress: number;
   scannedMessages: number;
+  analyzing?: boolean;
 }
 
 function fmt(n: number) {
   return n.toLocaleString("de-CH");
 }
 
-export default function StatusBar({ connected, progress, scannedMessages }: Props) {
+export default function StatusBar({ connected, progress, scannedMessages, analyzing = false }: Props) {
   const { t } = useTranslation();
+  const { formatted } = useElapsedTimer(analyzing);
+  const [finalDuration, setFinalDuration] = useState<string | null>(null);
+  const lastFormattedRef = useRef<string>("");
+  const wasRunning = useRef(false);
+  lastFormattedRef.current = formatted;
+
+  useEffect(() => {
+    if (analyzing) {
+      setFinalDuration(null);
+      wasRunning.current = true;
+    } else if (wasRunning.current) {
+      setFinalDuration(lastFormattedRef.current);
+      wasRunning.current = false;
+    }
+  }, [analyzing]);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#2a2a3e] border-t border-[#3a3a5a] px-4 py-1.5 flex items-center gap-3">
@@ -28,6 +46,16 @@ export default function StatusBar({ connected, progress, scannedMessages }: Prop
         <span className="text-[#888aaa] text-xs">
           {t("status.scanning", { count: fmt(scannedMessages) })}
         </span>
+      )}
+
+      {/* Elapsed timer while analyzing */}
+      {analyzing && (
+        <span className="text-yellow-400 text-xs tabular-nums font-mono">⏱ {formatted}</span>
+      )}
+
+      {/* Completion duration after analysis finishes */}
+      {!analyzing && finalDuration && scannedMessages === 0 && (
+        <span className="text-green-400 text-xs">✓ Abgeschlossen in {finalDuration}</span>
       )}
 
       {/* Progress bar (visible only when progress > 0) */}

@@ -163,7 +163,12 @@ async fn load_chat_members(
     telegram::mention::load_chat_members(&client, chat_id, &app).await
 }
 
-// ── First-mention command ─────────────────────────────────────────────────────
+// ── First-mention commands ────────────────────────────────────────────────────
+
+#[tauri::command]
+fn cancel_first_mention() {
+    telegram::mention::cancel();
+}
 
 #[tauri::command]
 async fn find_first_mention(
@@ -197,6 +202,7 @@ pub fn run() {
             export_csv,
             suggested_filename,
             load_chat_members,
+            cancel_first_mention,
             find_first_mention,
         ])
         .run(tauri::generate_context!())

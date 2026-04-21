@@ -299,7 +299,11 @@ pub async fn run_analysis(
     let mut first_poll_date: Option<DateTime<Utc>> = None;
     let mut last_poll_date: Option<DateTime<Utc>> = None;
 
-    let mut msg_iter = client.iter_messages(peer_ref.clone());
+    // Set offset_date so Telegram starts delivering messages from end_date backwards,
+    // skipping everything newer — critical speedup for historical custom date ranges.
+    let mut msg_iter = client
+        .iter_messages(peer_ref.clone())
+        .max_date(end_date.timestamp() as i32);
 
     loop {
         match msg_iter.next().await {
