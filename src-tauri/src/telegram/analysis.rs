@@ -27,11 +27,12 @@ pub struct MemberActivity {
     pub user_id: i64,
     pub name: String,
     pub username: Option<String>,
-    pub joined_date: Option<i64>, // Unix timestamp; None when not available (creator, non-admin fetch)
+    pub joined_date: Option<i64>,       // Unix timestamp; filled via GetParticipant after analysis
     pub message_count: u32,
     pub reaction_count: u32,
     pub poll_participations: u32,
     pub quiz_participations: u32,
+    pub first_message_date: Option<i64>, // Unix timestamp; earliest message in analysis period
     pub last_message_date: Option<i64>,
     pub last_reaction_date: Option<i64>,
     pub last_poll_date: Option<i64>,
@@ -247,9 +248,6 @@ pub async fn run_analysis(
     let (own_is_admin, own_can_get_participants) =
         check_own_permissions(&client, &peer_ref).await;
 
-    // Collect join dates (requires admin; silently returns empty map otherwise)
-    let join_dates = collect_join_dates(&client, &peer_ref).await;
-
     // Determine the scan window [cutoff, end_date]
     let (cutoff, end_date, period_from_str, period_to_str): (
         DateTime<Utc>,
@@ -288,8 +286,8 @@ pub async fn run_analysis(
         ),
     );
 
-    // user_id → (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date)
-    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32, u32, Option<i64>, Option<i64>, Option<i64>)> = HashMap::new();
+    // user_id → (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date, first_message_date)
+    let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32, u32, Option<i64>, Option<i64>, Option<i64>, Option<i64>)> = HashMap::new();
     let mut total_messages: u32 = 0;
     let mut total_polls: u32 = 0;
     let mut total_quizzes: u32 = 0;
@@ -342,10 +340,11 @@ pub async fn run_analysis(
                             }
                         });
 
-                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0, 0, None, None, None));
+                        let entry = activity.entry(uid).or_insert((name, username, 0, 0, 0, 0, None, None, None, None));
                         let msg_ts = msg.date().timestamp();
                         entry.2 += 1;
                         entry.6 = Some(entry.6.map_or(msg_ts, |p| p.max(msg_ts)));
+                        entry.9 = Some(entry.9.map_or(msg_ts, |p| p.min(msg_ts)));
                         total_messages += 1;
 
                         // Fetch per-message reactions
@@ -407,7 +406,7 @@ pub async fn run_analysis(
                                             .get(uid)
                                             .cloned()
                                             .unwrap_or_else(|| (format!("ID {}", uid), None));
-                                        (name, username, 0, 0, 0, 0, None, None, None)
+                                        (name, username, 0, 0, 0, 0, None, None, None, None)
                                     });
                                     entry.5 += 1; // quiz_participations
                                     entry.8 = Some(entry.8.map_or(poll_ts, |p| p.max(poll_ts)));
@@ -441,7 +440,7 @@ pub async fn run_analysis(
                                         .get(uid)
                                         .cloned()
                                         .unwrap_or_else(|| (format!("ID {}", uid), None));
-                                    (name, username, 0, 0, 0, 0, None, None, None)
+                                    (name, username, 0, 0, 0, 0, None, None, None, None)
                                 });
                                 entry.4 += 1; // poll_participations
                                 entry.8 = Some(entry.8.map_or(poll_ts, |p| p.max(poll_ts)));
@@ -489,26 +488,91 @@ pub async fn run_analysis(
         .map(
             |(
                 user_id,
-                (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date),
+                (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date, first_message_date),
             )| MemberActivity {
                 user_id,
                 name,
                 username,
-                joined_date: join_dates.get(&user_id).copied(),
+                joined_date: None, // filled below via individual GetParticipant calls
                 message_count,
                 reaction_count,
                 poll_participations,
                 quiz_participations,
+                first_message_date,
                 last_message_date,
                 last_reaction_date,
                 last_poll_date,
                 is_bot: bot_ids.contains(&user_id),
-                is_current_member: join_dates.is_empty() || join_dates.contains_key(&user_id),
+                is_current_member: true,
             },
         )
         .collect();
     members.sort_by(|a, b| b.message_count.cmp(&a.message_count));
     let members_with_messages = members.iter().filter(|m| m.message_count > 0).count() as u32;
+
+    // ── Fetch joined_date per active member via individual GetParticipant ────
+    let input_channel_opt = {
+        let ip = tl::enums::InputPeer::from(peer_ref.clone());
+        match ip {
+            tl::enums::InputPeer::Channel(c) => Some(tl::enums::InputChannel::Channel(
+                tl::types::InputChannel {
+                    channel_id: c.channel_id,
+                    access_hash: c.access_hash,
+                },
+            )),
+            _ => None,
+        }
+    };
+
+    if let Some(input_channel) = input_channel_opt {
+        let active_indices: Vec<usize> = members
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.message_count > 0 || m.reaction_count > 0)
+            .map(|(i, _)| i)
+            .collect();
+
+        let _ = app.emit(
+            "log",
+            format!("Hole Beitrittsdaten für {} Mitglieder…", active_indices.len()),
+        );
+
+        for (count, &idx) in active_indices.iter().enumerate() {
+            let user_id = members[idx].user_id;
+            let user_ref = PeerRef {
+                id: PeerId::user_unchecked(user_id),
+                auth: PeerAuth::default(),
+            };
+            if let Ok(peer) = client.resolve_peer(user_ref).await {
+                if let Some(pr) = peer.to_ref().await {
+                    let user_input_peer = tl::enums::InputPeer::from(pr);
+                    if let Ok(tl::enums::channels::ChannelParticipant::Participant(cp)) = client
+                        .invoke(&tl::functions::channels::GetParticipant {
+                            channel: input_channel.clone(),
+                            participant: user_input_peer,
+                        })
+                        .await
+                    {
+                        members[idx].joined_date = match &cp.participant {
+                            tl::enums::ChannelParticipant::Participant(p) => Some(p.date as i64),
+                            tl::enums::ChannelParticipant::Admin(a) => Some(a.date as i64),
+                            tl::enums::ChannelParticipant::ParticipantSelf(p) => Some(p.date as i64),
+                            _ => None,
+                        };
+                    }
+                }
+            }
+            if (count + 1) % 20 == 0 {
+                let _ = app.emit(
+                    "log",
+                    format!("Beitrittsdaten: {}/{} geholt…", count + 1, active_indices.len()),
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+
+        let _ = app.emit("log", "Beitrittsdaten vollständig.".to_string());
+    }
 
     // Ø eindeutige Voter pro Umfrage = Summe der Voter aller Polls / Anzahl Polls
     let avg_poll_participants: f32 = if total_polls > 0 {
@@ -542,78 +606,6 @@ pub async fn run_analysis(
     })
 }
 
-/// Fetch join dates (Unix timestamps) for all channel participants.
-/// Returns an empty map silently on error (e.g. when not admin).
-async fn collect_join_dates(
-    client: &grammers_client::Client,
-    peer_ref: &PeerRef,
-) -> HashMap<i64, i64> {
-    let input_peer = tl::enums::InputPeer::from(peer_ref.clone());
-    let input_channel = match input_peer {
-        tl::enums::InputPeer::Channel(c) => tl::enums::InputChannel::Channel(
-            tl::types::InputChannel {
-                channel_id: c.channel_id,
-                access_hash: c.access_hash,
-            },
-        ),
-        _ => return HashMap::new(),
-    };
-
-    let mut join_dates: HashMap<i64, i64> = HashMap::new();
-    let mut offset = 0i32;
-    let limit = 200i32;
-
-    loop {
-        let result = match client
-            .invoke(&tl::functions::channels::GetParticipants {
-                channel: input_channel.clone(),
-                filter: tl::enums::ChannelParticipantsFilter::ChannelParticipantsSearch(
-                    tl::types::ChannelParticipantsSearch { q: String::new() },
-                ),
-                offset,
-                limit,
-                hash: 0,
-            })
-            .await
-        {
-            Ok(r) => r,
-            Err(_) => break,
-        };
-
-        let (batch_count, participants) = match result {
-            tl::enums::channels::ChannelParticipants::Participants(list) => {
-                (list.participants.len(), list.participants)
-            }
-            tl::enums::channels::ChannelParticipants::NotModified => break,
-        };
-
-        if batch_count == 0 {
-            break;
-        }
-
-        for participant in participants {
-            match participant {
-                tl::enums::ChannelParticipant::Participant(p) => {
-                    join_dates.insert(p.user_id, p.date as i64);
-                }
-                tl::enums::ChannelParticipant::Admin(a) => {
-                    join_dates.insert(a.user_id, a.date as i64);
-                }
-                tl::enums::ChannelParticipant::Creator(_) => {
-                    // Creator has no join date in the Telegram API
-                }
-                _ => {}
-            }
-        }
-
-        if batch_count < limit as usize {
-            break;
-        }
-        offset += batch_count as i32;
-    }
-
-    join_dates
-}
 
 /// Check whether the signed-in account is an admin (or creator) of the channel.
 /// Returns `(is_admin, can_get_participants)` — both flags are identical since

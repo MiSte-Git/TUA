@@ -29,6 +29,7 @@ export interface MemberActivity {
   reaction_count: number;
   poll_participations: number;
   quiz_participations: number;
+  first_message_date: number | null;
   last_message_date: number | null;
   last_reaction_date: number | null;
   last_poll_date: number | null;

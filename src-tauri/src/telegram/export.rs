@@ -10,6 +10,12 @@ fn fmt_date(ts: Option<i64>) -> String {
         .unwrap_or_default()
 }
 
+fn fmt_datetime(ts: Option<i64>) -> String {
+    ts.and_then(|t| chrono::NaiveDateTime::from_timestamp_opt(t, 0))
+        .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_default()
+}
+
 // ── Error type ────────────────────────────────────────────────────────────────
 
 #[derive(thiserror::Error, Debug)]
@@ -128,10 +134,11 @@ pub fn export_csv(
         "name",
         "username",
         "joined_date",
-        "message_count",
+        "first_message_date",
         "last_message_date",
-        "reaction_count",
+        "message_count",
         "last_reaction_date",
+        "reaction_count",
         "poll_participations",
         "last_poll_date",
         "is_bot",
@@ -155,10 +162,11 @@ pub fn export_csv(
                 .and_then(|ts| chrono::NaiveDateTime::from_timestamp_opt(ts, 0))
                 .map(|dt| dt.format("%Y-%m-%d").to_string())
                 .unwrap_or_default(),
-            member.message_count.to_string(),
+            fmt_datetime(member.first_message_date),
             fmt_date(member.last_message_date),
-            member.reaction_count.to_string(),
+            member.message_count.to_string(),
             fmt_date(member.last_reaction_date),
+            member.reaction_count.to_string(),
             member.poll_participations.to_string(),
             fmt_date(member.last_poll_date),
             member.is_bot.to_string(),
