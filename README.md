@@ -1,5 +1,7 @@
 # Telegram User Activities
 
+**Aktuelle Version:** 0.2.0
+
 Desktop-Applikation zur Analyse der Mitgliederaktivität in Telegram-Gruppen und -Kanälen. Zeigt pro Mitglied Nachrichtenanzahl und Reaktionen; ermöglicht zusätzlich die gezielte Suche nach dem frühesten Nachweis eines bestimmten Benutzers sowie nach Ein- und Austrittsereignissen im Chatverlauf.
 
 Gebaut mit **Tauri 2** (Rust-Backend) · **React 19 + TypeScript** (Frontend) · **Tailwind CSS 4** · **grammers** (MTProto-Client).
@@ -183,7 +185,7 @@ Sucht Ein- und Austrittsereignisse eines bestimmten Benutzers anhand von Telegra
 |---|---|
 | **Username oder Mitglied wählen** | `@username`, Username oder Anzeigename eingeben; vorhandene Mitglieder können per Autocomplete ausgewählt werden |
 | **Ereignistyp wählen** | Filter für hinzugefügt, beigetreten, verlassen und entfernt setzen |
-| **Datumsbereich optional setzen** | `Zurück bis Datum` begrenzt die Suche nach hinten; `Bis Datum` begrenzt nach vorne, leer bedeutet heute |
+| **Datumsbereich optional setzen** | `Zurück bis Datum` begrenzt die Suche nach hinten; `Bis Datum` begrenzt nach vorne, leer bedeutet heute. Datumsformat: `TT.MM.JJJJ` |
 | **Suchen** | Durchsucht den Admin-Log, falls verfügbar, und fällt sonst auf den Chatverlauf zurück |
 | **Abbrechen** | Laufende Suche kann abgebrochen werden |
 

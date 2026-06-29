@@ -176,7 +176,7 @@ export function JoinLeaveView({
     e: React.ChangeEvent<HTMLInputElement>
   ) {
     setter(e.target.value);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) {
+    if (/^(\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})$/.test(e.target.value)) {
       e.currentTarget.blur();
     }
   }
@@ -356,7 +356,7 @@ export function JoinLeaveView({
             <input
               type="text"
               inputMode="numeric"
-              placeholder="YYYY-MM-DD oder leer"
+              placeholder="TT.MM.JJJJ oder leer"
               value={dateFrom}
               onChange={(e) => handleDateChange(setDateFrom, e)}
               disabled={loading}
@@ -370,7 +370,7 @@ export function JoinLeaveView({
             <input
               type="text"
               inputMode="numeric"
-              placeholder="Heute oder YYYY-MM-DD"
+              placeholder="Heute oder TT.MM.JJJJ"
               value={dateTo}
               onChange={(e) => handleDateChange(setDateTo, e)}
               disabled={loading}

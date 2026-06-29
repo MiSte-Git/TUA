@@ -369,7 +369,13 @@ pub async fn find_join_leave_events(
     let mut events = Vec::new();
     let mut scanned: u32 = 0;
     let mut service_scanned: u32 = 0;
-    let mut msg_iter = client.iter_messages(peer_ref);
+    let mut msg_iter = if let Some(to) = to_dt {
+        client
+            .iter_messages(peer_ref)
+            .max_date(to.timestamp().clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+    } else {
+        client.iter_messages(peer_ref)
+    };
 
     loop {
         if CANCEL.load(Ordering::Relaxed) {
@@ -409,7 +415,7 @@ pub async fn find_join_leave_events(
                         format!(
                             "Ein-/Austritt-Suche: {} Historieneinträge geprüft, aktuelles Datum: {}…",
                             scanned,
-                            msg_date.format("%Y-%m-%d")
+                            msg_date.format("%d.%m.%Y")
                         ),
                     );
                 }
@@ -662,7 +668,7 @@ async fn find_join_leave_events_admin_log(
                     format!(
                         "Ein-/Austritt-Suche: {} Admin-Log-Ereignisse geprüft, aktuelles Datum: {}…",
                         scanned,
-                        event_dt.format("%Y-%m-%d")
+                        event_dt.format("%d.%m.%Y")
                     ),
                 );
             }
@@ -880,8 +886,9 @@ fn parse_search_date(
     let Some(value) = value.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(None);
     };
-    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        .map_err(|_| format!("Ungültiges Datum: {}", value))?;
+    let date = NaiveDate::parse_from_str(value, "%d.%m.%Y")
+        .or_else(|_| NaiveDate::parse_from_str(value, "%Y-%m-%d"))
+        .map_err(|_| format!("Ungültiges Datum: {}. Erwartet: TT.MM.JJJJ", value))?;
     let time = if end_of_day {
         date.and_hms_opt(23, 59, 59)
     } else {
@@ -905,10 +912,10 @@ fn format_elapsed(started_at: Instant) -> String {
 
 fn format_date_range(from_dt: Option<DateTime<Utc>>, to_dt: Option<DateTime<Utc>>) -> String {
     let from = from_dt
-        .map(|dt| dt.format("%Y-%m-%d").to_string())
+        .map(|dt| dt.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|| "kein Zurück-bis-Datum".to_string());
     let to = to_dt
-        .map(|dt| dt.format("%Y-%m-%d").to_string())
+        .map(|dt| dt.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|| "Heute".to_string());
     format!("{} bis {}", from, to)
 }
