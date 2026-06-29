@@ -1,6 +1,6 @@
 # Telegram User Activities
 
-Desktop-Applikation zur Analyse der Mitgliederaktivität in Telegram-Gruppen und -Kanälen. Zeigt pro Mitglied Nachrichtenanzahl und Reaktionen; ermöglicht zusätzlich die gezielte Suche nach dem frühesten Nachweis eines bestimmten Benutzers im gesamten Chatverlauf.
+Desktop-Applikation zur Analyse der Mitgliederaktivität in Telegram-Gruppen und -Kanälen. Zeigt pro Mitglied Nachrichtenanzahl und Reaktionen; ermöglicht zusätzlich die gezielte Suche nach dem frühesten Nachweis eines bestimmten Benutzers sowie nach Ein- und Austrittsereignissen im Chatverlauf.
 
 Gebaut mit **Tauri 2** (Rust-Backend) · **React 19 + TypeScript** (Frontend) · **Tailwind CSS 4** · **grammers** (MTProto-Client).
 
@@ -118,12 +118,13 @@ Das erzeugte Paket kann auf dem Zielsystem wie gewohnt installiert werden (Doppe
 
 ### Layout
 
-Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von beiden Tabs gemeinsam genutzt. Darunter befinden sich zwei Tabs:
+Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeinsam genutzt. Darunter befinden sich drei Tabs:
 
 | Tab | Funktion |
 |---|---|
 | **Aktivitätsanalyse** | Nachrichten- und Reaktionsstatistik für alle Mitglieder im gewählten Zeitraum |
 | **Erste Erwähnung** | Frühester Nachweis eines bestimmten Benutzers im gesamten Chatverlauf |
+| **Ein/Austritt** | Suche nach Telegram-Service-Messages für hinzugefügt, beigetreten, verlassen und entfernt |
 
 ### Tab „Aktivitätsanalyse"
 
@@ -174,6 +175,36 @@ Sucht den **frühesten Nachweis** eines bestimmten Benutzers im Chat — unabhä
 
 > **Hinweis:** Die Suche kann bei sehr großen Gruppen oder langen Verläufen mehrere Minuten dauern. Fortschritt ist im Log-Fenster am unteren Rand sichtbar.
 
+### Tab „Ein/Austritt"
+
+Sucht Ein- und Austrittsereignisse eines bestimmten Benutzers anhand von Telegram-Service-Messages. Es wird **keine Textsuche** nach sichtbaren Telegram-UI-Texten verwendet; ausgewertet werden Telegram-API-Aktionen wie Hinzufügen, Beitritt per Link/Anfrage, Verlassen und Entfernen.
+
+| Schritt | Aktion |
+|---|---|
+| **Username oder Mitglied wählen** | `@username`, Username oder Anzeigename eingeben; vorhandene Mitglieder können per Autocomplete ausgewählt werden |
+| **Ereignistyp wählen** | Filter für hinzugefügt, beigetreten, verlassen und entfernt setzen |
+| **Datumsbereich optional setzen** | `Zurück bis Datum` begrenzt die Suche nach hinten; `Bis Datum` begrenzt nach vorne, leer bedeutet heute |
+| **Suchen** | Durchsucht den Admin-Log, falls verfügbar, und fällt sonst auf den Chatverlauf zurück |
+| **Abbrechen** | Laufende Suche kann abgebrochen werden |
+
+**Ergebnis:**
+
+| Feld | Beschreibung |
+|---|---|
+| Ereignis | hinzugefügt, beigetreten, verlassen oder entfernt |
+| Datum / Uhrzeit | Zeitpunkt des Ereignisses |
+| Betroffener User | gefundener Benutzer inklusive ID/Username, soweit verfügbar |
+| Ausführender Account/Bot | Account, der die Aktion ausgelöst hat, soweit Telegram dies liefert |
+| Chat-ID / Message-ID | technische IDs aus Telegram |
+
+**Log und Laufzeit:**
+
+Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sichtbare menschliche Nachrichten gezählt, sondern Telegram-Historieneinträge. Darunter können auch importierte/archivierte Nachrichten, Medien, Bot-Nachrichten und Service-Messages fallen. Der Abschlusslog unterscheidet deshalb zwischen geprüften Historieneinträgen und tatsächlich gefundenen Service-Messages, z. B.:
+
+`Ein-/Austritt-Suche abgeschlossen. 43956 Historieneinträge geprüft, davon 475 Service-Messages, 4 Treffer gefunden. Dauer: 7m 25s.`
+
+> **Hinweis:** Große Archivierungs- oder Importblöcke können die Suche verlangsamen, ohne das Ergebnis zu verfälschen. Wenn das gesuchte Ereignis sicher nach einem bekannten Archivierungsblock liegt, kann `Zurück bis Datum` entsprechend enger gesetzt werden.
+
 ---
 
 ## Projektstruktur
@@ -185,7 +216,7 @@ Sucht den **frühesten Nachweis** eines bestimmten Benutzers im Chat — unabhä
 │   │   ├── LoginFlow.tsx       # Login-Wizard (Telefon, Code, Passwort)
 │   │   ├── ChatUrlInput.tsx    # Geteilte Chat-URL-Eingabe mit History-Dropdown
 │   │   ├── MainView.tsx        # Tab 1: Aktivitätsanalyse
-│   │   ├── FirstMentionView.tsx # Tab 2: Erste Erwähnung
+│   │   ├── FirstMentionView.tsx # Tabs: Erste Erwähnung und Ein/Austritt
 │   │   ├── Controls.tsx        # Analyse-Parameter und Export
 │   │   ├── ResultsTable.tsx    # Ergebnistabelle (sortierbar)
 │   │   ├── PeriodSelector.tsx  # Zeitraum-Auswahl
@@ -199,7 +230,7 @@ Sucht den **frühesten Nachweis** eines bestimmten Benutzers im Chat — unabhä
         └── telegram/
             ├── auth.rs         # Login-Flow, Session-Verwaltung
             ├── analysis.rs     # Nachrichtenanalyse (Aktivitätsanalyse)
-            ├── mention.rs      # Erste-Erwähnung-Suche
+            ├── mention.rs      # Erste-Erwähnung- und Ein-/Austritt-Suche
             └── export.rs       # CSV-Export
 ```
 
@@ -218,6 +249,9 @@ Sucht den **frühesten Nachweis** eines bestimmten Benutzers im Chat — unabhä
 
 **„Erste Erwähnung"-Suche dauert sehr lange**
 → Die Suche durchläuft den gesamten Chatverlauf ohne Zeitraum-Limit. Bei Gruppen mit Hunderttausenden von Nachrichten ist eine Laufzeit von mehreren Minuten normal. Der Fortschritt ist im Log-Fenster sichtbar.
+
+**„Ein/Austritt"-Suche prüft ungewöhnlich viele Historieneinträge**
+→ Telegram liefert nicht nur sichtbare menschliche Nachrichten, sondern API-Historieneinträge. Archivierte oder importierte Nachrichten können große Blöcke erzeugen. Die Suche wertet daraus nur Telegram-Service-Messages als mögliche Treffer aus; der Abschlusslog zeigt, wie viele Service-Messages tatsächlich geprüft wurden.
 
 **WebKit-Fehler unter Linux**
 → Systembibliotheken fehlen. Den `apt`/`pacman`/`dnf`-Befehl oben ausführen.
