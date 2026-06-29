@@ -3,7 +3,7 @@ mod telegram;
 
 use telegram::{
     AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
-    FirstMentionResult,
+    FirstMentionResult, JoinLeaveSearchResult,
 };
 
 // ── Credentials commands ──────────────────────────────────────────────────────
@@ -171,6 +171,11 @@ fn cancel_first_mention() {
 }
 
 #[tauri::command]
+fn cancel_join_leave_events() {
+    telegram::mention::cancel();
+}
+
+#[tauri::command]
 async fn find_first_mention(
     chat_id: i64,
     chat_username: Option<String>,
@@ -181,6 +186,34 @@ async fn find_first_mention(
         .await
         .ok_or("Not authorized")?;
     telegram::mention::find_first_mention(&client, chat_id, chat_username, username, &app).await
+}
+
+#[tauri::command]
+async fn find_join_leave_events(
+    chat_id: i64,
+    user_id: Option<i64>,
+    username: Option<String>,
+    display_name: Option<String>,
+    event_types: Vec<String>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<JoinLeaveSearchResult, String> {
+    let client = telegram::auth::get_client()
+        .await
+        .ok_or("Not authorized")?;
+    telegram::mention::find_join_leave_events(
+        &client,
+        chat_id,
+        user_id,
+        username,
+        display_name,
+        event_types,
+        date_from,
+        date_to,
+        &app,
+    )
+    .await
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -203,7 +236,9 @@ pub fn run() {
             suggested_filename,
             load_chat_members,
             cancel_first_mention,
+            cancel_join_leave_events,
             find_first_mention,
+            find_join_leave_events,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

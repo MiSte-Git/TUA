@@ -82,6 +82,27 @@ export interface FirstMentionResult {
   joined_at_is_rejoin?: boolean;
 }
 
+// ── Join/leave events ────────────────────────────────────────────────────────
+
+export type JoinLeaveEventType = "added" | "joined" | "left" | "removed";
+
+export interface JoinLeaveEvent {
+  event_type: JoinLeaveEventType;
+  date: string;
+  time: string;
+  affected_user: string;
+  affected_user_id?: number | null;
+  affected_username?: string | null;
+  actor?: string | null;
+  actor_user_id?: number | null;
+  chat_id: number;
+  message_id: number;
+}
+
+export interface JoinLeaveSearchResult {
+  events: JoinLeaveEvent[];
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 
 export type AppPhase =

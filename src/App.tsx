@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import LoginFlow from "./components/LoginFlow";
 import LogWindow from "./components/LogWindow";
 import MainView from "./components/MainView";
-import FirstMentionView from "./components/FirstMentionView";
+import FirstMentionView, { JoinLeaveView } from "./components/FirstMentionView";
 import BotList from "./components/BotList";
 import ChatUrlInput from "./components/ChatUrlInput";
 import StatusBar from "./components/StatusBar";
@@ -12,7 +12,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import type { AppPhase, AnalysisResult, ChatInfo } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 
-type ActiveTab = "analysis" | "first_mention" | "bots";
+type ActiveTab = "analysis" | "first_mention" | "join_leave" | "bots";
 
 export default function App() {
   const { t } = useTranslation();
@@ -135,6 +135,12 @@ export default function App() {
           >
             {t("tabs.first_mention")}
           </button>
+          <button
+            onClick={() => setActiveTab("join_leave")}
+            className={`${tabBase} ${activeTab === "join_leave" ? tabActive : tabInactive}`}
+          >
+            Ein/Austritt
+          </button>
           {result && result.all_bots.length > 0 && (
             <button
               onClick={() => setActiveTab("bots")}
@@ -173,6 +179,9 @@ export default function App() {
             chatId={chatInfo?.id}
             chatUsername={chatInfo?.username}
           />
+        )}
+        {activeTab === "join_leave" && (
+          <JoinLeaveView chatId={chatInfo?.id} clearLogs={() => setLogs([])} />
         )}
         {activeTab === "bots" && (
           <BotList
