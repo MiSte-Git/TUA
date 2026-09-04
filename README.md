@@ -1,6 +1,6 @@
 # Telegram User Activities
 
-**Aktuelle Version:** 0.2.0
+**Aktuelle Version:** 0.3.0
 
 Desktop-Applikation zur Analyse der Mitgliederaktivität in Telegram-Gruppen und -Kanälen. Zeigt pro Mitglied Nachrichtenanzahl und Reaktionen; ermöglicht zusätzlich die gezielte Suche nach dem frühesten Nachweis eines bestimmten Benutzers sowie nach Ein- und Austrittsereignissen im Chatverlauf.
 
