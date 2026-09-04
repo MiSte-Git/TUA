@@ -9,6 +9,7 @@ import BotList from "./components/BotList";
 import ChatUrlInput from "./components/ChatUrlInput";
 import StatusBar from "./components/StatusBar";
 import LanguageSelector from "./components/LanguageSelector";
+import UpdateBanner from "./components/UpdateBanner";
 import type { AppPhase, AnalysisResult, ChatInfo } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -88,6 +89,7 @@ export default function App() {
   if (phase === "checking") {
     return (
       <div className="min-h-screen bg-[#1e1e2e] flex items-center justify-center">
+        <UpdateBanner />
         <p className="text-[#888aaa] animate-pulse">Verbinde…</p>
       </div>
     );
@@ -96,6 +98,7 @@ export default function App() {
   if (phase === "login") {
     return (
       <div className="min-h-screen bg-[#1e1e2e] flex flex-col pb-9">
+        <UpdateBanner />
         <div className="flex-1 flex items-center justify-center p-6">
           <LoginFlow onSuccess={() => setPhase("main")} />
         </div>
@@ -111,6 +114,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#1e1e2e] flex flex-col text-[#e0e0f0] pb-9">
+      <UpdateBanner />
       <main className="flex-1 flex flex-col gap-4 p-4 overflow-hidden">
 
         {/* Shared Chat-URL input — always visible */}

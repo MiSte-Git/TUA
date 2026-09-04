@@ -1,0 +1,101 @@
+name: Release
+
+# Baut bei jedem Versions-Tag (vX.Y.Z) die Installer für Linux, macOS und
+# Windows und veröffentlicht sie als GitHub-Release-Entwurf – Pendant zu
+# PDF-Translator's build-bootstrap.yml, nur dass hier Tauris eigener
+# Bundler (statt PyInstaller) die fertigen Installer erzeugt.
+#
+# Verlangt zwei Repository-Secrets für das Signieren der Update-Artefakte
+# (siehe README, Abschnitt "Architektur des Auto-Updates"):
+#   TAURI_SIGNING_PRIVATE_KEY          – Inhalt von .updater-signing.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD – leer lassen, Key wurde ohne Passwort erzeugt
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag muss zu package.json und tauri.conf.json passen
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAURI_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "Tag: $TAG_VERSION | package.json: $PKG_VERSION | tauri.conf.json: $TAURI_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ] || [ "$TAG_VERSION" != "$TAURI_VERSION" ]; then
+            echo "::error::Versions-Mismatch: Tag v$TAG_VERSION muss mit package.json ($PKG_VERSION) und tauri.conf.json ($TAURI_VERSION) übereinstimmen."
+            exit 1
+          fi
+
+  build:
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            target: "aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest"
+            target: "x86_64-apple-darwin"
+            args: "--target x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            target: ""
+            args: ""
+          - platform: "windows-latest"
+            target: ""
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Rust einrichten
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust-Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Linux-Systembibliotheken installieren
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev build-essential
+
+      - name: Frontend-Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Installer bauen & veröffentlichen
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Telegram User Activities v__VERSION__"
+          releaseBody: |
+            Installer für Linux, macOS und Windows unten unter "Assets".
+            Siehe Commit-Historie für Details zu diesem Release.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

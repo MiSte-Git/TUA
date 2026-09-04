@@ -9,6 +9,8 @@ src-tauri/target/
 .env
 *.session
 *.session-journal
+.updater-signing.key
+.updater-signing.key.pub
 
 # Exports (persönliche Daten)
 exports/

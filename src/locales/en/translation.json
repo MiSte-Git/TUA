@@ -123,5 +123,13 @@
     "scanning": "Scanning messages… {{count}} so far",
     "lang_de": "DE",
     "lang_en": "EN"
+  },
+  "update": {
+    "available": "Update available: version {{version}}",
+    "install": "Install now",
+    "downloading": "Downloading update…",
+    "restarting": "Installed, restarting…",
+    "error": "Update could not be installed",
+    "dismiss": "Later"
   }
 }

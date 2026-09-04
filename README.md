@@ -8,6 +8,57 @@ Gebaut mit **Tauri 2** (Rust-Backend) · **React 19 + TypeScript** (Frontend) ·
 
 ---
 
+Es gibt zwei Wege, Telegram User Activities zu benutzen – such dir den passenden aus:
+
+- **[Für alle anderen](#für-alle-anderen-fertiger-installer)** – fertiger
+  Installer von der Releases-Seite, keine Kommandozeile, kein Rust/Node
+  nötig.
+- **[Für Entwickler:innen](#für-entwicklerinnen)** – Quellcode klonen,
+  Abhängigkeiten selbst installieren, direkt aus dem Repository heraus
+  bauen/starten.
+
+Beide Wege installieren am Ende exakt dasselbe Programm.
+
+## Telegram API-Zugangsdaten
+
+Unabhängig vom gewählten Weg braucht die App eigene API-Zugangsdaten von
+Telegram (kostenlos, jede/r mit Telegram-Konto kann sie anlegen):
+
+1. Auf [my.telegram.org](https://my.telegram.org) mit der eigenen
+   Telefonnummer einloggen.
+2. Unter **API development tools** eine neue Applikation anlegen (Name und
+   Kurzname sind frei wählbar, z. B. "TUA").
+3. `api_id` (Zahl) und `api_hash` (Zeichenkette) notieren.
+
+Die App fragt beim ersten Start selbst danach (mit direktem Link zu
+my.telegram.org) und speichert die Eingabe lokal – ein Aufschreiben ist nur
+zur Sicherheit sinnvoll, falls die Konfiguration später mal neu eingegeben
+werden muss.
+
+## Für alle anderen (fertiger Installer)
+
+1. Von der [Releases-Seite](https://github.com/MiSte-Git/TUA/releases) die
+   passende Datei für dein Betriebssystem laden:
+   - Windows: `.msi` oder `-setup.exe`
+   - macOS: `_aarch64.dmg` (Apple Silicon) oder `_x64.dmg` (Intel)
+   - Linux: `.deb`, `.rpm` oder `.AppImage`
+2. Datei ausführen/installieren wie jedes andere Programm auf dem jeweiligen
+   Betriebssystem – ein `npm`/`cargo` wird dafür nicht gebraucht.
+3. Beim ersten Start fragt die App nach den Telegram-API-Zugangsdaten
+   (`api_id`/`api_hash`, siehe [Telegram API-Zugangsdaten](#telegram-api-zugangsdaten)
+   oben – falls noch nicht vorhanden, dort in wenigen Minuten kostenlos
+   anlegen) und speichert sie danach lokal – Umgebungsvariablen sind für
+   diesen Weg **nicht** nötig.
+4. Die Builds sind aktuell **nicht signiert** (Code-Signing ist für eine
+   spätere Version vorgesehen). Windows SmartScreen bzw. macOS Gatekeeper
+   zeigen deshalb beim allerersten Start eine Warnung – "Weitere
+   Informationen"/"Trotzdem ausführen" (Windows) bzw. Rechtsklick →
+   "Öffnen" (macOS) bestätigt den Start einmalig.
+5. Ab dann prüft die App bei jedem Start automatisch auf neue Releases und
+   bietet ein gefundenes Update direkt per Klick zum Installieren an (siehe
+   [Architektur des Auto-Updates](#architektur-des-auto-updates) unten) –
+   ein erneuter manueller Download ist danach nicht mehr nötig.
+
 ## Voraussetzungen
 
 ### System
@@ -34,17 +85,7 @@ sudo dnf install webkit2gtk4.1-devel openssl-devel gtk3-devel librsvg2-devel
 
 Auf **macOS** und **Windows** sind keine zusätzlichen Systembibliotheken nötig.
 
-### Telegram API-Zugangsdaten
-
-Die App benötigt eigene API-Zugangsdaten von Telegram:
-
-1. Auf [my.telegram.org](https://my.telegram.org) einloggen.
-2. Unter **API development tools** eine neue Applikation anlegen.
-3. `api_id` (Zahl) und `api_hash` (Zeichenkette) notieren.
-
----
-
-## Installation & Kompilierung
+## Für Entwickler:innen
 
 ### 1. Repository klonen
 
@@ -59,9 +100,15 @@ cd "Telegram User Activities"
 npm install
 ```
 
-### 3. Umgebungsvariablen setzen
+### 3. Telegram API-Zugangsdaten (optional)
 
-Die API-Zugangsdaten müssen beim Bauen **und** beim Ausführen als Umgebungsvariablen verfügbar sein:
+Noch keine `api_id`/`api_hash`? Siehe
+[Telegram API-Zugangsdaten](#telegram-api-zugangsdaten) oben. Die App fragt
+fehlende Zugangsdaten beim ersten Start über die eigene Oberfläche ab und
+speichert sie danach in einer lokalen Config-Datei –
+für den Dev-Modus ist das der bequemste Weg. Alternativ (z. B. für CI oder
+mehrere parallele Checkouts) lassen sie sich vorab als Umgebungsvariablen
+setzen, die App nimmt sie dann mit Vorrang vor der gespeicherten Config:
 
 ```bash
 export TELEGRAM_API_ID=12345678
@@ -240,8 +287,8 @@ Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sich
 
 ## Häufige Probleme
 
-**`TELEGRAM_API_ID not set` beim Start**
-→ Umgebungsvariablen sind nicht gesetzt. Vor dem Start exportieren oder in das Shell-Profil eintragen (siehe oben).
+**App fragt bei jedem Start erneut nach API-Zugangsdaten**
+→ Die Config-Datei mit den gespeicherten Zugangsdaten konnte nicht geschrieben werden (z. B. fehlende Schreibrechte im Benutzerprofil), oder es sind widersprüchliche `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`-Umgebungsvariablen gesetzt, die Vorrang vor der gespeicherten Config haben – prüfen und ggf. entfernen (siehe oben).
 
 **Login-Loop / „Session ungültig"**
 → Session-Datei löschen (Pfad siehe oben) und neu einloggen.
@@ -257,3 +304,68 @@ Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sich
 
 **WebKit-Fehler unter Linux**
 → Systembibliotheken fehlen. Den `apt`/`pacman`/`dnf`-Befehl oben ausführen.
+
+---
+
+## Release-Prozess
+
+Ein Release entsteht aus einem Git-Tag; die Versionsnummer lebt an zwei
+Stellen, `package.json` und `src-tauri/tauri.conf.json`, und muss dort
+identisch sein. Ablauf:
+
+1. Alle Feature-Commits sind auf `main`.
+2. `version` in **beiden** Dateien erhöhen und als eigenen Commit einchecken:
+
+   ```bash
+   git add package.json src-tauri/tauri.conf.json
+   git commit -m "Version X.Y.Z"
+   ```
+
+3. Tag setzen und pushen – das führende `v` gehört zum Tag, nicht zur
+   Versionsnummer:
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin main vX.Y.Z
+   ```
+
+4. Der Tag-Push startet [`release.yml`](.github/workflows/release.yml). Die
+   Pipeline bricht ab, **bevor** irgendetwas gebaut wird, falls Tag und
+   Versionsnummern nicht übereinstimmen. Sonst baut sie die Installer für
+   Linux, macOS (Apple Silicon + Intel) und Windows und legt daraus einen
+   **Release-Entwurf** (Draft) an.
+5. In den GitHub Actions prüfen, dass alle vier Matrix-Jobs durchgelaufen
+   sind, dann den Entwurf unter *Releases* auf GitHub kurz durchsehen und
+   veröffentlichen. Bestehende Installationen finden das neue Release beim
+   nächsten App-Start automatisch über die eingebaute Update-Prüfung.
+
+## Architektur des Auto-Updates
+
+Die Update-Prüfung nutzt Tauris offizielles
+[`updater`-Plugin](https://v2.tauri.app/plugin/updater/) und braucht dafür
+weder einen eigenen Server noch Zusatzinfrastruktur:
+
+1. Die Release-Pipeline (`.github/workflows/release.yml`) baut bei jedem
+   Versions-Tag die Installer für alle drei Plattformen und signiert
+   zusätzlich kleinere Update-Archive mit einem eigenen Schlüsselpaar
+   (unabhängig vom fehlenden Code-Signing weiter oben – dieses Schlüsselpaar
+   dient ausschließlich der Update-Integrität, nicht der Windows-/
+   macOS-Signierung). Der private Schlüssel liegt als Repository-Secret
+   `TAURI_SIGNING_PRIVATE_KEY`, der öffentliche Gegenpart steht in
+   `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`).
+2. Zusammen mit den Installern landet eine `latest.json` im GitHub-Release,
+   die Versionsnummer, Download-URLs und Signatur der Update-Archive enthält.
+3. Jede laufende App fragt bei jedem Start
+   `https://github.com/MiSte-Git/TUA/releases/latest/download/latest.json`
+   ab (siehe `plugins.updater.endpoints` in `tauri.conf.json`). Ist die dort
+   genannte Version neuer, zeigt die App ein Banner mit einem
+   "Jetzt installieren"-Button; ein Klick lädt das signierte Update-Archiv,
+   prüft die Signatur gegen den eingebauten Public Key, installiert es und
+   startet die App neu.
+4. Schlägt die Prüfung fehl (kein Internet, kein Release vorhanden, Dev-Build
+   ohne veröffentlichten Tag) bleibt das Banner einfach unsichtbar – die App
+   funktioniert normal weiter.
+
+Weil ein GitHub-Release erst nach manueller Freigabe des Entwurfs (Schritt 5
+oben) öffentlich sichtbar wird, lösen Zwischenstände in der Pipeline keine
+Auto-Updates bei bestehenden Nutzer:innen aus.
