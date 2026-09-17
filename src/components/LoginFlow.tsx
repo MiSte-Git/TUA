@@ -287,6 +287,20 @@ export default function LoginFlow({ onSuccess }: Props) {
           >
             {loading ? "Prüfe Code…" : "Bestätigen"}
           </button>
+
+          {/* Back to phone step: lets the user re-request a code if none arrived */}
+          <button
+            type="button"
+            onClick={() => {
+              setStep("phone");
+              setCode("");
+              setError(null);
+            }}
+            disabled={loading}
+            className="text-[#888aaa] text-xs hover:text-[#e0e0f0] transition-colors underline self-center disabled:opacity-50"
+          >
+            Zurück / Code erneut anfordern
+          </button>
         </div>
       )}
 

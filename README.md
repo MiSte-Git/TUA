@@ -290,6 +290,9 @@ Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sich
 **App fragt bei jedem Start erneut nach API-Zugangsdaten**
 → Die Config-Datei mit den gespeicherten Zugangsdaten konnte nicht geschrieben werden (z. B. fehlende Schreibrechte im Benutzerprofil), oder es sind widersprüchliche `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`-Umgebungsvariablen gesetzt, die Vorrang vor der gespeicherten Config haben – prüfen und ggf. entfernen (siehe oben).
 
+**„Verbindungsfehler: ... API_ID_INVALID"**
+→ Die gesendete `api_id`/`api_hash`-Kombination wird von Telegram abgelehnt (meist ein nicht zusammengehöriges Paar, ein Tippfehler oder veraltete `TELEGRAM_API_ID`/`TELEGRAM_API_HASH`-Umgebungsvariablen, die Vorrang vor der Config haben). Beim Verbindungsaufbau wird jetzt geloggt, aus welcher Quelle die Zugangsdaten stammen sowie Länge und ein maskierter Ausschnitt von `api_hash` (kein Klartext) – im Terminal sichtbar bei `npm run tauri dev`, sonst über die von `tauri-plugin-log` geschriebene Log-Datei im App-Log-Verzeichnis.
+
 **Login-Loop / „Session ungültig"**
 → Session-Datei löschen (Pfad siehe oben) und neu einloggen.
 

@@ -14,21 +14,78 @@ struct CredentialsStatus {
     api_hash_set: bool,
 }
 
+/// Maskiert den api_hash für Diagnose-Logs: nur Länge und die äußersten
+/// 2 Zeichen je Seite bleiben erkennbar - genug, um z. B. eine falsche
+/// Länge (Kopierfehler, unsichtbares Zeichen) zu erkennen, ohne den Wert
+/// selbst preiszugeben.
+fn mask_api_hash(api_hash: &str) -> String {
+    let chars: Vec<char> = api_hash.chars().collect();
+    let len = chars.len();
+    if len <= 4 {
+        return "*".repeat(len);
+    }
+    let start: String = chars[..2].iter().collect();
+    let end: String = chars[len - 2..].iter().collect();
+    format!("{}{}{}", start, "*".repeat(len - 4), end)
+}
+
+// Telegram vergibt api_id-Werte aktuell typischerweise 7-8-stellig. Kein
+// hartes Limit von Telegram, daher hier bewusst nur eine WARNING statt
+// eines Fehlers - falls künftig längere IDs vergeben werden, soll das
+// nicht plötzlich Logins blockieren, nur auffallen (z. B. Tippfehler mit
+// einer Ziffer zu viel beim manuellen Abtippen statt Copy-Paste).
+const API_ID_PLAUSIBLE_MAX_DIGITS: usize = 8;
+
+fn warn_if_api_id_implausible(api_id: i32) {
+    let digits = api_id.unsigned_abs().to_string().len();
+    if digits > API_ID_PLAUSIBLE_MAX_DIGITS {
+        log::warn!(
+            "api_id hat {} Stellen - ungewöhnlich lang (Telegram vergibt aktuell typischerweise bis zu {}-stellige Werte). Möglicher Tippfehler beim manuellen Eintragen (z. B. eine Ziffer zu viel)? Der Wert selbst wird hier bewusst nicht geloggt.",
+            digits,
+            API_ID_PLAUSIBLE_MAX_DIGITS,
+        );
+    }
+}
+
+/// Loggt Metadaten (keine Secret-Werte) zu den geladenen Telegram-Credentials -
+/// hilft bei API_ID_INVALID zu unterscheiden, ob die Werte aus der falschen
+/// Quelle stammen oder api_hash eine unerwartete Länge hat (z. B. durch ein
+/// unsichtbares Zeichen beim Copy-Paste, das .trim() nicht entfernt).
+fn log_credentials_diagnostics(source: &str, api_id: i32, api_hash: &str) {
+    log::info!(
+        "Telegram-Credentials aus {}. api_hash-Länge={} (erwartet: 32), api_hash={}",
+        source,
+        api_hash.chars().count(),
+        mask_api_hash(api_hash),
+    );
+    warn_if_api_id_implausible(api_id);
+}
+
 /// Resolves API credentials using the priority: env vars → config file.
 /// Returns an error string if credentials are missing.
 fn resolve_credentials() -> Result<(i32, String), String> {
     let env_id = std::env::var("TELEGRAM_API_ID")
         .ok()
-        .and_then(|v| v.parse::<i32>().ok());
-    let env_hash = std::env::var("TELEGRAM_API_HASH").ok();
+        .and_then(|v| v.trim().parse::<i32>().ok());
+    let env_hash = std::env::var("TELEGRAM_API_HASH")
+        .ok()
+        .map(|v| v.trim().to_string());
 
     if let (Some(id), Some(hash)) = (env_id, env_hash) {
+        log_credentials_diagnostics(
+            "Umgebungsvariablen (TELEGRAM_API_ID/TELEGRAM_API_HASH)",
+            id,
+            &hash,
+        );
         return Ok((id, hash));
     }
 
     let cfg = config::load_config();
     match (cfg.api_id, cfg.api_hash) {
-        (Some(id), Some(hash)) => Ok((id, hash)),
+        (Some(id), Some(hash)) => {
+            log_credentials_diagnostics(&config::config_path().display().to_string(), id, &hash);
+            Ok((id, hash))
+        }
         _ => Err("Credentials nicht gesetzt. Bitte API ID und API Hash eingeben.".to_string()),
     }
 }
@@ -221,6 +278,11 @@ async fn find_join_leave_events(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
