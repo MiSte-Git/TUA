@@ -9,6 +9,16 @@ name: Release
 # (siehe README, Abschnitt "Architektur des Auto-Updates"):
 #   TAURI_SIGNING_PRIVATE_KEY          – Inhalt von .updater-signing.key
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD – leer lassen, Key wurde ohne Passwort erzeugt
+#
+# Struktur bewusst in drei Jobs aufgeteilt (create-release / build /
+# publish-release) statt wie frueher der Matrix-Build direkt per tagName
+# veroeffentlichen zu lassen: bei vier parallelen Matrix-Legs (macOS
+# aarch64/x86_64, Linux, Windows) versuchte sonst jedes Leg gleichzeitig,
+# das Release fuer denselben Tag zu suchen/anzulegen - das fuehrte zu
+# vereinzelten 500ern von GitHub beim Asset-Upload. Jetzt legt genau ein
+# Job das Release (als Entwurf) an, alle Matrix-Legs laden nur noch Assets
+# in dieses eine Release hoch, und erst wenn alle vier durch sind, wird
+# der Entwurf veroeffentlicht.
 
 on:
   push:
@@ -35,8 +45,39 @@ jobs:
             exit 1
           fi
 
-  build:
+  create-release:
     needs: check-version
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+    steps:
+      - name: Release-Entwurf anlegen
+        id: create-release
+        uses: actions/github-script@v7
+        env:
+          TAG: ${{ github.ref_name }}
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: process.env.TAG,
+              name: `Telegram User Activities ${process.env.TAG}`,
+              body: [
+                'Installer für Linux, macOS und Windows unten unter "Assets".',
+                'Unter Linux fuer automatische Updates die .AppImage nehmen -',
+                '.deb/.rpm zeigen neue Versionen zwar an, muessen aber manuell',
+                'neu heruntergeladen werden (Tauri-Einschraenkung, kein',
+                'Selbst-Update ausserhalb von AppImage).',
+                'Siehe Commit-Historie für Details zu diesem Release.'
+              ].join('\n'),
+              draft: true,
+              prerelease: false
+            })
+            return data.id
+
+  build:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -84,22 +125,29 @@ jobs:
       - name: Frontend-Abhängigkeiten installieren
         run: npm ci
 
-      - name: Installer bauen & veröffentlichen
+      - name: Installer bauen & Assets hochladen
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Telegram User Activities v__VERSION__"
-          releaseBody: |
-            Installer für Linux, macOS und Windows unten unter "Assets".
-            Unter Linux fuer automatische Updates die .AppImage nehmen -
-            .deb/.rpm zeigen neue Versionen zwar an, muessen aber manuell
-            neu heruntergeladen werden (Tauri-Einschraenkung, kein
-            Selbst-Update ausserhalb von AppImage).
-            Siehe Commit-Historie für Details zu diesem Release.
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release veröffentlichen (Entwurf aufheben)
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: process.env.RELEASE_ID,
+              draft: false
+            })
