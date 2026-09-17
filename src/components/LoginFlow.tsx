@@ -23,6 +23,7 @@ export default function LoginFlow({ onSuccess }: Props) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordHint, setPasswordHint] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -92,6 +93,7 @@ export default function LoginFlow({ onSuccess }: Props) {
       } else if (res.status === "code_required") {
         setStep("code");
       } else if (res.status === "password_required") {
+        setPasswordHint(res.hint ?? null);
         setStep("password");
       }
     } catch (e) {
@@ -109,6 +111,7 @@ export default function LoginFlow({ onSuccess }: Props) {
       if (res.status === "ok") {
         onSuccess();
       } else if (res.status === "password_required") {
+        setPasswordHint(res.hint ?? null);
         setStep("password");
       }
     } catch (e) {
@@ -256,10 +259,12 @@ export default function LoginFlow({ onSuccess }: Props) {
       {step === "code" && (
         <div className="flex flex-col gap-4">
           <label className="text-[#e0e0f0] text-sm font-medium">
-            SMS-Code eingeben
+            Anmeldecode eingeben
           </label>
           <p className="text-[#888aaa] text-xs">
-            Telegram hat einen Code an {phone} gesendet.
+            Telegram hat einen Code an {phone} gesendet - je nach Konto per SMS
+            oder als Nachricht im "Telegram"-Chat (Systembenachrichtigungen)
+            in einer bereits angemeldeten Telegram-App.
           </p>
           <div className="relative">
             <input
@@ -310,6 +315,9 @@ export default function LoginFlow({ onSuccess }: Props) {
           <label className="text-[#e0e0f0] text-sm font-medium">
             Telegram-Passwort eingeben
           </label>
+          {passwordHint && (
+            <p className="text-[#888aaa] text-xs">Hinweis: {passwordHint}</p>
+          )}
           {capsLock && (
             <p className="text-yellow-400 text-xs">⚠️ Caps Lock ist aktiviert</p>
           )}

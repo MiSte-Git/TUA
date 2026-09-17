@@ -9,6 +9,7 @@ export type ConnectStatus = 'ok' | 'code_required' | 'password_required';
 
 export interface ConnectResult {
   status: ConnectStatus;
+  hint?: string | null; // nur bei status === 'password_required' gesetzt
 }
 
 // ── Analysis ──────────────────────────────────────────────────────────────────

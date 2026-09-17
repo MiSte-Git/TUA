@@ -95,6 +95,10 @@ jobs:
           releaseName: "Telegram User Activities v__VERSION__"
           releaseBody: |
             Installer für Linux, macOS und Windows unten unter "Assets".
+            Unter Linux fuer automatische Updates die .AppImage nehmen -
+            .deb/.rpm zeigen neue Versionen zwar an, muessen aber manuell
+            neu heruntergeladen werden (Tauri-Einschraenkung, kein
+            Selbst-Update ausserhalb von AppImage).
             Siehe Commit-Historie für Details zu diesem Release.
           releaseDraft: false
           prerelease: false

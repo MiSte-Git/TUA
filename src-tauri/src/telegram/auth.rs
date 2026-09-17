@@ -65,7 +65,7 @@ pub enum AuthError {
 pub enum ConnectResult {
     Ok,
     CodeRequired,
-    PasswordRequired,
+    PasswordRequired { hint: Option<String> },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -159,10 +159,14 @@ pub async fn submit_code(code: &str) -> Result<ConnectResult, AuthError> {
         }
         Err(SignInError::PasswordRequired(password_token)) => {
             log::info!("2FA-Passwort erforderlich");
+            // hint() vor dem Move in AuthStage auslesen - grammers liefert den
+            // vom Nutzer bei der 2FA-Einrichtung hinterlegten Hinweis direkt
+            // am Token mit, ohne extra Serveranfrage.
+            let hint = password_token.hint().map(|s| s.to_string());
             state.stage = AuthStage::PasswordRequired {
                 token: password_token,
             };
-            Ok(ConnectResult::PasswordRequired)
+            Ok(ConnectResult::PasswordRequired { hint })
         }
         Err(SignInError::InvalidCode) => {
             // Put the token back so the user can try again.

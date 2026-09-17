@@ -2,8 +2,17 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { open } from "@tauri-apps/plugin-shell";
 
-type Status = "idle" | "available" | "downloading" | "restarting" | "error" | "dismissed";
+type Status = "idle" | "available" | "downloading" | "restarting" | "error" | "manual" | "dismissed";
+
+const RELEASES_URL = "https://github.com/MiSte-Git/TUA/releases/latest";
+
+// Tauris Updater kann sich unter Linux nur bei einer AppImage-Installation
+// selbst ersetzen (siehe https://v2.tauri.app/plugin/updater/). Bei .deb/.rpm
+// wirft downloadAndInstall() genau diese Meldung - dafuer statt der rohen
+// Fehlermeldung einen Hinweis mit direktem Link zur Releases-Seite zeigen.
+const LINUX_MANUAL_UPDATE_MARKER = "Cannot run updater on this Linux package";
 
 /**
  * Checks for app updates once on mount (GitHub Releases via tauri.conf.json
@@ -40,8 +49,13 @@ export default function UpdateBanner() {
       setStatus("restarting");
       await relaunch();
     } catch (e) {
-      setError(String(e));
-      setStatus("error");
+      const message = String(e);
+      if (message.includes(LINUX_MANUAL_UPDATE_MARKER)) {
+        setStatus("manual");
+      } else {
+        setError(message);
+        setStatus("error");
+      }
     }
   }
 
@@ -68,6 +82,23 @@ export default function UpdateBanner() {
       )}
       {status === "downloading" && <span>{t("update.downloading")}</span>}
       {status === "restarting" && <span>{t("update.restarting")}</span>}
+      {status === "manual" && (
+        <>
+          <span className="flex-1">{t("update.manualRequired", { version: update?.version })}</span>
+          <button
+            onClick={() => open(RELEASES_URL)}
+            className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md font-medium transition-colors"
+          >
+            {t("update.openReleases")}
+          </button>
+          <button
+            onClick={() => setStatus("dismissed")}
+            className="text-white/80 hover:text-white px-2"
+          >
+            {t("update.dismiss")}
+          </button>
+        </>
+      )}
       {status === "error" && (
         <span className="flex-1">
           {t("update.error")}

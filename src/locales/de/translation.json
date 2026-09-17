@@ -130,6 +130,8 @@
     "downloading": "Lädt Update herunter…",
     "restarting": "Installiert, startet neu…",
     "error": "Update konnte nicht installiert werden",
+    "manualRequired": "Update auf Version {{version}} verfügbar - bei dieser Installationsart (.deb/.rpm) klappt die automatische Installation nicht, nur AppImage kann sich selbst aktualisieren. Bitte manuell von der Releases-Seite herunterladen.",
+    "openReleases": "Releases-Seite öffnen",
     "dismiss": "Später"
   }
 }

@@ -41,7 +41,7 @@ werden muss.
    passende Datei für dein Betriebssystem laden:
    - Windows: `.msi` oder `-setup.exe`
    - macOS: `_aarch64.dmg` (Apple Silicon) oder `_x64.dmg` (Intel)
-   - Linux: `.deb`, `.rpm` oder `.AppImage`
+   - Linux: `.deb`, `.rpm` oder `.AppImage` (für automatische Updates **`.AppImage` empfehlenswert**, siehe Punkt 5 unten)
 2. Datei ausführen/installieren wie jedes andere Programm auf dem jeweiligen
    Betriebssystem – ein `npm`/`cargo` wird dafür nicht gebraucht.
 3. Beim ersten Start fragt die App nach den Telegram-API-Zugangsdaten
@@ -55,9 +55,14 @@ werden muss.
    Informationen"/"Trotzdem ausführen" (Windows) bzw. Rechtsklick →
    "Öffnen" (macOS) bestätigt den Start einmalig.
 5. Ab dann prüft die App bei jedem Start automatisch auf neue Releases und
-   bietet ein gefundenes Update direkt per Klick zum Installieren an (siehe
-   [Architektur des Auto-Updates](#architektur-des-auto-updates) unten) –
-   ein erneuter manueller Download ist danach nicht mehr nötig.
+   zeigt ein Banner an, wenn eine neuere Version verfügbar ist (siehe
+   [Architektur des Auto-Updates](#architektur-des-auto-updates) unten). Der
+   "Jetzt installieren"-Klick funktioniert unter Windows, macOS und bei der
+   `.AppImage` vollautomatisch; bei `.deb`/`.rpm` erkennt Tauris Updater das
+   Update zwar genauso, kann sich unter Linux aber nur bei einer
+   AppImage-Installation selbst ersetzen – die App zeigt in dem Fall
+   stattdessen einen Hinweis mit Link zur Releases-Seite für den manuellen
+   Download.
 
 ## Voraussetzungen
 
@@ -390,9 +395,17 @@ weder einen eigenen Server noch Zusatzinfrastruktur:
    "Jetzt installieren"-Button; ein Klick lädt das signierte Update-Archiv,
    prüft die Signatur gegen den eingebauten Public Key, installiert es und
    startet die App neu.
-4. Schlägt die Prüfung fehl (kein Internet, kein Release vorhanden, Dev-Build
-   ohne veröffentlichten Tag) bleibt das Banner einfach unsichtbar – die App
-   funktioniert normal weiter.
+4. Ausnahme: Unter Linux kann sich Tauris Updater nur bei einer
+   AppImage-Installation selbst ersetzen (offizielle Einschränkung, siehe
+   [Tauri-Doku](https://v2.tauri.app/plugin/updater/)). Bei `.deb`/`.rpm`
+   schlägt der Installieren-Klick mit einem Fehler fehl, den
+   `UpdateBanner.tsx` abfängt und stattdessen als Hinweis mit Link zur
+   Releases-Seite anzeigt (`update.manualRequired` in den
+   Übersetzungsdateien) - die Erkennung einer neuen Version funktioniert
+   davon unabhängig immer.
+5. Schlägt die Prüfung selbst fehl (kein Internet, kein Release vorhanden,
+   Dev-Build ohne veröffentlichten Tag) bleibt das Banner einfach unsichtbar
+   – die App funktioniert normal weiter.
 
 Das Release wird direkt bei Fertigstellung der Pipeline veröffentlicht (kein
 Entwurf/manueller Freigabe-Schritt) - jeder erfolgreich gebaute Tag-Push löst

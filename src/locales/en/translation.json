@@ -130,6 +130,8 @@
     "downloading": "Downloading update…",
     "restarting": "Installed, restarting…",
     "error": "Update could not be installed",
+    "manualRequired": "Update to version {{version}} available - automatic install isn't supported for this install type (.deb/.rpm), only AppImage can self-update. Please download it manually from the releases page.",
+    "openReleases": "Open releases page",
     "dismiss": "Later"
   }
 }
