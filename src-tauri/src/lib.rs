@@ -3,7 +3,7 @@ mod telegram;
 
 use telegram::{
     AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
-    FirstMentionResult, JoinLeaveSearchResult,
+    FirstMentionResult, JoinLeaveSearchResult, UserOnlineStatus,
 };
 
 // ── Credentials commands ──────────────────────────────────────────────────────
@@ -183,6 +183,13 @@ fn cancel_analysis() {
     telegram::analysis::cancel();
 }
 
+#[tauri::command]
+async fn fetch_user_status(user_id: i64) -> Result<UserOnlineStatus, String> {
+    telegram::analysis::fetch_user_status(user_id)
+        .await
+        .map_err(|e: AnalysisError| e.to_string())
+}
+
 // ── Export commands ───────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -309,6 +316,7 @@ pub fn run() {
             resolve_chat,
             run_analysis,
             cancel_analysis,
+            fetch_user_status,
             export_csv,
             suggested_filename,
             load_chat_members,

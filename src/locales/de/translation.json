@@ -94,7 +94,19 @@
     "search_placeholder": "Name oder @username suchen…",
     "search_results_one": "{{count}} Treffer",
     "search_results_other": "{{count}} Treffer",
-    "last_message": "Letzte Nachricht"
+    "last_message": "Letzte Nachricht",
+    "online_status": "Online-Status",
+    "online_status_hint": "Klicken um Telegrams echten Online-Status für dieses Mitglied zu laden (1 zusätzlicher API-Aufruf)",
+    "online_status_load": "laden…",
+    "online_status_loading": "lädt…",
+    "online_status_error": "Fehler, erneut klicken",
+    "online_status_online": "● online",
+    "online_status_offline": "offline",
+    "online_status_offline_since": "offline seit {{date}}",
+    "online_status_recently": "kürzlich online",
+    "online_status_last_week": "letzte Woche online",
+    "online_status_last_month": "letzten Monat online",
+    "online_status_unknown": "unbekannt (privat)"
   },
   "bots": {
     "none_found": "Keine Bots im Kanal gefunden",

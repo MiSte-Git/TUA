@@ -94,7 +94,19 @@
     "search_placeholder": "Search name or @username…",
     "search_results_one": "{{count}} result",
     "search_results_other": "{{count}} results",
-    "last_message": "Last message"
+    "last_message": "Last message",
+    "online_status": "Online status",
+    "online_status_hint": "Click to fetch this member's real Telegram online status (1 extra API call)",
+    "online_status_load": "load…",
+    "online_status_loading": "loading…",
+    "online_status_error": "error, click to retry",
+    "online_status_online": "● online",
+    "online_status_offline": "offline",
+    "online_status_offline_since": "offline since {{date}}",
+    "online_status_recently": "recently online",
+    "online_status_last_week": "online last week",
+    "online_status_last_month": "online last month",
+    "online_status_unknown": "unknown (private)"
   },
   "bots": {
     "none_found": "No bots found in channel",

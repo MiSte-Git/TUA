@@ -44,6 +44,19 @@ export interface BotMember {
   username: string | null;
 }
 
+export type UserOnlineStatusKind =
+  | "online"
+  | "offline"
+  | "recently"
+  | "last_week"
+  | "last_month"
+  | "unknown";
+
+export interface UserOnlineStatus {
+  kind: UserOnlineStatusKind;
+  was_online: number | null; // Unix timestamp, nur bei kind === "offline"
+}
+
 export interface AnalysisResult {
   chat: ChatInfo;
   members: MemberActivity[];

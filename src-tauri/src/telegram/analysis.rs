@@ -66,6 +66,14 @@ pub struct AnalysisResult {
     pub avg_quiz_participation: f32,   // Ø Quiz-Teilnahmen pro aktivem Teilnehmer
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UserOnlineStatus {
+    /// "online" | "offline" | "recently" | "last_week" | "last_month" | "unknown"
+    pub kind: String,
+    /// Unix timestamp; only set when kind == "offline"
+    pub was_online: Option<i64>,
+}
+
 #[derive(thiserror::Error, Debug, serde::Serialize)]
 pub enum AnalysisError {
     #[error("Not authorized")]
@@ -852,4 +860,62 @@ async fn fetch_reactions(
     }
 
     Ok(peers)
+}
+
+
+// ── Single-user online status (on-demand, e.g. after filtering by name) ───────
+
+/// Fetches a single user's current Telegram status ("last seen"). Called
+/// on-demand per member (e.g. on click in the filtered results table) -
+/// deliberately NOT batched over all members, to avoid the rate-limit risk
+/// a per-member call for potentially thousands of members would bring.
+pub async fn fetch_user_status(user_id: i64) -> Result<UserOnlineStatus, AnalysisError> {
+    let client = super::auth::get_client()
+        .await
+        .ok_or(AnalysisError::NotAuthorized)?;
+
+    let user_ref = PeerRef {
+        id: PeerId::user_unchecked(user_id),
+        auth: PeerAuth::default(),
+    };
+    let peer = client
+        .resolve_peer(user_ref)
+        .await
+        .map_err(|e| AnalysisError::Telegram(e.to_string()))?;
+    let pr = peer
+        .to_ref()
+        .await
+        .ok_or_else(|| AnalysisError::Telegram("Could not obtain peer reference".into()))?;
+
+    let input_user = match tl::enums::InputPeer::from(pr) {
+        tl::enums::InputPeer::User(u) => tl::enums::InputUser::User(tl::types::InputUser {
+            user_id: u.user_id,
+            access_hash: u.access_hash,
+        }),
+        _ => return Err(AnalysisError::Telegram("Kein Benutzer-Peer".into())),
+    };
+
+    let users = client
+        .invoke(&tl::functions::users::GetUsers {
+            id: vec![input_user],
+        })
+        .await
+        .map_err(|e| AnalysisError::Telegram(e.to_string()))?;
+
+    let Some(tl::enums::User::User(u)) = users.into_iter().next() else {
+        return Err(AnalysisError::Telegram("Nutzer nicht gefunden".into()));
+    };
+
+    let (kind, was_online) = match u.status {
+        Some(tl::enums::UserStatus::Online(_)) => ("online".to_string(), None),
+        Some(tl::enums::UserStatus::Offline(s)) => {
+            ("offline".to_string(), Some(s.was_online as i64))
+        }
+        Some(tl::enums::UserStatus::Recently(_)) => ("recently".to_string(), None),
+        Some(tl::enums::UserStatus::LastWeek(_)) => ("last_week".to_string(), None),
+        Some(tl::enums::UserStatus::LastMonth(_)) => ("last_month".to_string(), None),
+        _ => ("unknown".to_string(), None),
+    };
+
+    Ok(UserOnlineStatus { kind, was_online })
 }

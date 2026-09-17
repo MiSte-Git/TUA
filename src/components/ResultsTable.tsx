@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { AnalysisResult, MemberActivity } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import type { AnalysisResult, MemberActivity, UserOnlineStatus } from "../types";
 import Tooltip from "./Tooltip";
 
 interface Props {
@@ -30,6 +31,13 @@ function fmtJoinDate(ts: number | null): string {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
+function fmtDateTime(ts: number): string {
+  const d = new Date(ts * 1000);
+  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return `${date} ${time}`;
+}
+
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) return <span className="text-[#3a3a5a] ml-1">↕</span>;
   return <span className="text-[#7c6af7] ml-1">{dir === "asc" ? "↑" : "↓"}</span>;
@@ -52,6 +60,49 @@ export default function ResultsTable({
   const [sortKey, setSortKey] = useState<SortKey>("message_count");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [nameFilter, setNameFilter] = useState("");
+  const [statuses, setStatuses] = useState<
+    Map<number, { loading: boolean; data?: UserOnlineStatus; error?: string }>
+  >(new Map());
+
+  function loadStatus(userId: number) {
+    setStatuses((prev) => new Map(prev).set(userId, { loading: true }));
+    invoke<UserOnlineStatus>("fetch_user_status", { userId })
+      .then((data) => {
+        setStatuses((prev) => new Map(prev).set(userId, { loading: false, data }));
+      })
+      .catch((e) => {
+        setStatuses((prev) =>
+          new Map(prev).set(userId, { loading: false, error: String(e) })
+        );
+      });
+  }
+
+  function statusLabel(userId: number): { text: string; clickable: boolean } {
+    const s = statuses.get(userId);
+    if (!s) return { text: t("table.online_status_load"), clickable: true };
+    if (s.loading) return { text: t("table.online_status_loading"), clickable: false };
+    if (s.error) return { text: t("table.online_status_error"), clickable: true };
+    if (!s.data) return { text: t("table.online_status_load"), clickable: true };
+    switch (s.data.kind) {
+      case "online":
+        return { text: t("table.online_status_online"), clickable: false };
+      case "offline":
+        return {
+          text: s.data.was_online
+            ? t("table.online_status_offline_since", { date: fmtDateTime(s.data.was_online) })
+            : t("table.online_status_offline"),
+          clickable: false,
+        };
+      case "recently":
+        return { text: t("table.online_status_recently"), clickable: false };
+      case "last_week":
+        return { text: t("table.online_status_last_week"), clickable: false };
+      case "last_month":
+        return { text: t("table.online_status_last_month"), clickable: false };
+      default:
+        return { text: t("table.online_status_unknown"), clickable: false };
+    }
+  }
 
   if (!result) {
     return (
@@ -156,6 +207,9 @@ export default function ResultsTable({
             >
               {t("table.last_message")} <SortIcon active={sortKey === "last_message_date"} dir={sortDir} />
             </th>
+            <th className={thST}>
+              {t("table.online_status")}
+            </th>
             {includeReactions && (
               <th
                 className={thBase + " text-right"}
@@ -254,6 +308,24 @@ export default function ResultsTable({
                 </td>
                 <td className={`px-3 py-2 text-right tabular-nums text-[#888aaa] text-xs ${textColor}`}>
                   {fmtJoinDate(m.last_message_date)}
+                </td>
+                <td
+                  className="px-2 py-2 text-center"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (statusLabel(m.user_id).clickable) loadStatus(m.user_id);
+                  }}
+                  title={t("table.online_status_hint")}
+                >
+                  <span
+                    className={`text-xs whitespace-nowrap ${
+                      statusLabel(m.user_id).clickable
+                        ? "text-[#7c6af7] cursor-pointer hover:underline"
+                        : "text-[#888aaa]"
+                    }`}
+                  >
+                    {statusLabel(m.user_id).text}
+                  </span>
                 </td>
                 {includeReactions && (
                   <td
