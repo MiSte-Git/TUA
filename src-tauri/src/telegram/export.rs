@@ -5,13 +5,13 @@ use chrono::Utc;
 use super::analysis::{AnalysisResult, ChatInfo};
 
 fn fmt_date(ts: Option<i64>) -> String {
-    ts.and_then(|t| chrono::NaiveDateTime::from_timestamp_opt(t, 0))
+    ts.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
         .map(|dt| dt.format("%d.%m.%Y").to_string())
         .unwrap_or_default()
 }
 
 fn fmt_datetime(ts: Option<i64>) -> String {
-    ts.and_then(|t| chrono::NaiveDateTime::from_timestamp_opt(t, 0))
+    ts.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
         .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_default()
 }
@@ -159,7 +159,7 @@ pub fn export_csv(
             member.name.clone(),
             member.username.clone().unwrap_or_default(),
             member.joined_date
-                .and_then(|ts| chrono::NaiveDateTime::from_timestamp_opt(ts, 0))
+                .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
                 .map(|dt| dt.format("%Y-%m-%d").to_string())
                 .unwrap_or_default(),
             fmt_datetime(member.first_message_date),

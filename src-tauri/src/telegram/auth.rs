@@ -23,7 +23,6 @@ pub fn session_path() -> PathBuf {
 enum AuthStage {
     CodeRequired {
         token: LoginToken,
-        api_hash: String,
     },
     PasswordRequired {
         token: PasswordToken,
@@ -124,10 +123,7 @@ pub async fn connect(api_id: i32, api_hash: &str, phone: &str) -> Result<Connect
     let mut guard = global().lock().await;
     *guard = Some(TelegramState {
         client,
-        stage: AuthStage::CodeRequired {
-            token,
-            api_hash: api_hash.to_string(),
-        },
+        stage: AuthStage::CodeRequired { token },
         _runner: runner_handle,
     });
     Ok(ConnectResult::CodeRequired)
@@ -139,9 +135,9 @@ pub async fn submit_code(code: &str) -> Result<ConnectResult, AuthError> {
     let state = guard.as_mut().ok_or(AuthError::SessionInvalid)?;
 
     let token = match &state.stage {
-        AuthStage::CodeRequired { token, .. } => {
+        AuthStage::CodeRequired { .. } => {
             // We need to take ownership; swap stage out temporarily.
-            let AuthStage::CodeRequired { token, .. } =
+            let AuthStage::CodeRequired { token } =
                 std::mem::replace(&mut state.stage, AuthStage::Authorized)
             else {
                 unreachable!()
