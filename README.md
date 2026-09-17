@@ -143,6 +143,31 @@ Ausgabe je nach Betriebssystem:
 
 Das erzeugte Paket kann auf dem Zielsystem wie gewohnt installiert werden (Doppelklick oder Paketverwaltung).
 
+### 4c. Lokal ohne root installieren (Launcher/Desktop-Eintrag)
+
+Alternative zu 4b für den eigenen Rechner unter Linux, analog zum Vorgehen im
+"Telegram Nachrichten kopieren"-Projekt: `build_linux.sh` baut das Release-
+Binary (via `npm run tauri build`) und schreibt einen Versionsstempel;
+`install_linux.sh` kopiert es ohne root-Rechte nach `~/.local/share/tua/` und
+legt/aktualisiert einen Desktop-Eintrag an, der auf dieses installierte
+Binary zeigt - baut bei veraltetem oder fehlendem Stand automatisch neu.
+
+```bash
+./install_linux.sh              # baut bei Bedarf neu und installiert
+./install_linux.sh --clean      # erzwingt vorher einen sauberen Neubau
+```
+
+Danach im Anwendungsmenü "Telegram User Activities" suchen und an
+Taskleiste/Dock anheften. Rührt nichts an der Release-Pipeline/dem
+Auto-Update aus 4b/GitHub Actions - beides kann parallel bestehen.
+
+Deinstallieren:
+
+```bash
+rm -f ~/.local/share/applications/tua.desktop
+rm -rf ~/.local/share/tua
+```
+
 ---
 
 ## Erste Verwendung
