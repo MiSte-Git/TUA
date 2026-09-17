@@ -51,6 +51,7 @@ export default function ResultsTable({
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState<SortKey>("message_count");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [nameFilter, setNameFilter] = useState("");
 
   if (!result) {
     return (
@@ -91,9 +92,17 @@ export default function ResultsTable({
       : (bv as number) - (av as number);
   });
 
-  const visible = sorted.filter(
-    (m) => m.message_count > 0 || m.poll_participations > 0 || m.reaction_count > 0
-  );
+  const query = nameFilter.trim().toLowerCase();
+  const visible = sorted
+    .filter(
+      (m) => m.message_count > 0 || m.poll_participations > 0 || m.reaction_count > 0
+    )
+    .filter(
+      (m) =>
+        query === "" ||
+        m.name.toLowerCase().includes(query) ||
+        (m.username ?? "").toLowerCase().includes(query)
+    );
   const activeMembers   = visible.filter((m) => !excludedMembers.has(m.user_id));
   const disabledMembers = visible.filter((m) =>  excludedMembers.has(m.user_id));
   const displayMembers  = [...activeMembers, ...disabledMembers];
@@ -107,10 +116,25 @@ export default function ResultsTable({
     "px-2 py-2 text-xs font-medium text-[#888aaa] uppercase tracking-wide select-none whitespace-nowrap border-b border-[#3a3a5a] text-center";
 
   return (
-    <div
-      className="rounded-xl border border-[#3a3a5a]"
-      style={{ resize: "vertical", overflow: "auto", minHeight: "200px", height: "400px" }}
-    >
+    <div className="flex flex-col gap-2 min-h-0">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={nameFilter}
+          onChange={(e) => setNameFilter(e.target.value)}
+          placeholder={t("table.search_placeholder")}
+          className="w-full max-w-xs bg-[#1e1e2e] border border-[#3a3a5a] focus:border-[#7c6af7] outline-none px-3 py-1.5 rounded-lg text-[#e0e0f0] text-sm placeholder:text-[#555570]"
+        />
+        {query !== "" && (
+          <span className="text-[#888aaa] text-xs whitespace-nowrap">
+            {t("table.search_results", { count: displayMembers.length })}
+          </span>
+        )}
+      </div>
+      <div
+        className="rounded-xl border border-[#3a3a5a]"
+        style={{ resize: "vertical", overflow: "auto", minHeight: "200px", height: "400px" }}
+      >
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-[#2a2a3e]">
           <tr>
@@ -281,6 +305,7 @@ export default function ResultsTable({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -1,9 +1,17 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use grammers_client::{tl, InvocationError};
 use grammers_session::types::{PeerAuth, PeerId, PeerKind, PeerRef};
 use tauri::Emitter;
+
+static CANCEL: AtomicBool = AtomicBool::new(false);
+
+/// Signal the running run_analysis to abort at the next checkpoint.
+pub fn cancel() {
+    CANCEL.store(true, Ordering::Relaxed);
+}
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -68,6 +76,8 @@ pub enum AnalysisError {
     InvalidUrl(String),
     #[error("Telegram error: {0}")]
     Telegram(String),
+    #[error("Abgebrochen")]
+    Cancelled,
 }
 
 // ── URL parsing ───────────────────────────────────────────────────────────────
@@ -203,6 +213,9 @@ pub async fn run_analysis(
         .await
         .ok_or(AnalysisError::NotAuthorized)?;
 
+    // Reset any leftover cancel flag from a previous aborted run
+    CANCEL.store(false, Ordering::Relaxed);
+
     let (peer, label) = match parse_chat_identifier(chat_url)? {
         ChatIdentifier::Username(name) => {
             let _ = app.emit("log", format!("Kanal @{} wird aufgelöst…", name));
@@ -304,6 +317,11 @@ pub async fn run_analysis(
         .max_date(end_date.timestamp() as i32);
 
     loop {
+        if CANCEL.load(Ordering::Relaxed) {
+            CANCEL.store(false, Ordering::Relaxed);
+            let _ = app.emit("log", "Analyse abgebrochen.".to_string());
+            return Err(AnalysisError::Cancelled);
+        }
         match msg_iter.next().await {
             Ok(Some(msg)) => {
                 if msg.date() < cutoff {
@@ -538,6 +556,11 @@ pub async fn run_analysis(
         );
 
         for (count, &idx) in active_indices.iter().enumerate() {
+            if CANCEL.load(Ordering::Relaxed) {
+                CANCEL.store(false, Ordering::Relaxed);
+                let _ = app.emit("log", "Analyse abgebrochen.".to_string());
+                return Err(AnalysisError::Cancelled);
+            }
             let user_id = members[idx].user_id;
             let user_ref = PeerRef {
                 id: PeerId::user_unchecked(user_id),

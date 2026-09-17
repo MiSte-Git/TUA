@@ -189,6 +189,7 @@ export default function MainView({
 
   function handleStop() {
     cancelledRef.current = true;
+    invoke("cancel_analysis").catch(() => {});
     setAnalyzing(false);
     setPhase("main");
     setProgress(0);

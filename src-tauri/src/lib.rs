@@ -178,6 +178,11 @@ async fn run_analysis(
     .map_err(|e: AnalysisError| e.to_string())
 }
 
+#[tauri::command]
+fn cancel_analysis() {
+    telegram::analysis::cancel();
+}
+
 // ── Export commands ───────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -303,6 +308,7 @@ pub fn run() {
             get_auth_status,
             resolve_chat,
             run_analysis,
+            cancel_analysis,
             export_csv,
             suggested_filename,
             load_chat_members,

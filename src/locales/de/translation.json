@@ -90,7 +90,10 @@
     "st": "ST",
     "st_tooltip": "Servant Team – Klick zum Markieren/Entmarkieren.",
     "st_mark": "Als Servant Team markieren",
-    "st_unmark": "ST-Markierung entfernen"
+    "st_unmark": "ST-Markierung entfernen",
+    "search_placeholder": "Name oder @username suchen…",
+    "search_results_one": "{{count}} Treffer",
+    "search_results_other": "{{count}} Treffer"
   },
   "bots": {
     "none_found": "Keine Bots im Kanal gefunden",
