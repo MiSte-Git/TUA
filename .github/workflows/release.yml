@@ -125,15 +125,44 @@ jobs:
       - name: Frontend-Abhängigkeiten installieren
         run: npm ci
 
-      - name: Installer bauen & Assets hochladen
+      - name: Installer bauen (nur bauen, kein Upload)
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+
+      # tauri-action laedt Assets bei vier parallelen Matrix-Jobs gegen
+      # dasselbe Release manchmal mit einem rohen 500er von GitHub ab
+      # (auch ohne die vorherige Race Condition beim Release-Anlegen).
+      # softprops/action-gh-release ist genau fuer "mehrere Jobs haengen
+      # Dateien an dasselbe Release" gebaut und robuster/mit Retries.
+      - name: Bundle-Assets hochladen
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: false
+          files: |
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.app.tar.gz
+            src-tauri/target/**/release/bundle/**/*.app.tar.gz.sig
+            src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.deb.sig
+            src-tauri/target/**/release/bundle/**/*.rpm
+            src-tauri/target/**/release/bundle/**/*.rpm.sig
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.AppImage.sig
+            src-tauri/target/**/release/bundle/**/*.AppImage.tar.gz
+            src-tauri/target/**/release/bundle/**/*.AppImage.tar.gz.sig
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.msi.zip
+            src-tauri/target/**/release/bundle/**/*.msi.zip.sig
+            src-tauri/target/**/release/bundle/**/*.nsis.zip
+            src-tauri/target/**/release/bundle/**/*.nsis.zip.sig
 
   publish-release:
     needs: [create-release, build]
