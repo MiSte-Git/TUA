@@ -468,7 +468,22 @@ pub async fn run_analysis(
                 }
             }
             Ok(None) => break,
-            Err(e) => return Err(AnalysisError::Telegram(e.to_string())),
+            Err(e) => {
+                // A transient API error (e.g. rate limiting) on a long scan should not
+                // discard everything gathered so far. Only bail out hard if we have
+                // nothing at all yet - otherwise log it and show the partial result.
+                if scanned == 0 {
+                    return Err(AnalysisError::Telegram(e.to_string()));
+                }
+                let _ = app.emit(
+                    "log",
+                    format!(
+                        "Warnung: Scan nach {} Nachrichten mit Fehler abgebrochen ({}). Zeige Ergebnis mit den bisher gescannten Nachrichten - der Zeitraum ist ggf. unvollständig.",
+                        scanned, e
+                    ),
+                );
+                break;
+            }
         }
     }
 

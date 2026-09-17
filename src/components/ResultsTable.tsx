@@ -17,7 +17,7 @@ interface Props {
   onToggleST: (userId: number, name: string) => void;
 }
 
-type SortKey = keyof Pick<MemberActivity, "name" | "joined_date" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations"> | "poll_pct";
+type SortKey = keyof Pick<MemberActivity, "name" | "joined_date" | "message_count" | "reaction_count" | "poll_participations" | "quiz_participations" | "last_message_date"> | "poll_pct";
 type SortDir = "asc" | "desc";
 
 function fmt(n: number) {
@@ -150,6 +150,12 @@ export default function ResultsTable({
             >
               {t("table.messages")} <SortIcon active={sortKey === "message_count"} dir={sortDir} />
             </th>
+            <th
+              className={thBase + " text-right"}
+              onClick={() => handleSort("last_message_date")}
+            >
+              {t("table.last_message")} <SortIcon active={sortKey === "last_message_date"} dir={sortDir} />
+            </th>
             {includeReactions && (
               <th
                 className={thBase + " text-right"}
@@ -245,6 +251,9 @@ export default function ResultsTable({
                   className={`px-3 py-2 text-right tabular-nums text-[#e0e0f0] ${textColor}`}
                 >
                   {fmt(m.message_count)}
+                </td>
+                <td className={`px-3 py-2 text-right tabular-nums text-[#888aaa] text-xs ${textColor}`}>
+                  {fmtJoinDate(m.last_message_date)}
                 </td>
                 {includeReactions && (
                   <td

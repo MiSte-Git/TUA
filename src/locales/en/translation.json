@@ -93,7 +93,8 @@
     "st_unmark": "Remove ST marking",
     "search_placeholder": "Search name or @username…",
     "search_results_one": "{{count}} result",
-    "search_results_other": "{{count}} results"
+    "search_results_other": "{{count}} results",
+    "last_message": "Last message"
   },
   "bots": {
     "none_found": "No bots found in channel",
