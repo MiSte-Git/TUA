@@ -360,12 +360,12 @@ identisch sein. Ablauf:
 4. Der Tag-Push startet [`release.yml`](.github/workflows/release.yml). Die
    Pipeline bricht ab, **bevor** irgendetwas gebaut wird, falls Tag und
    Versionsnummern nicht übereinstimmen. Sonst baut sie die Installer für
-   Linux, macOS (Apple Silicon + Intel) und Windows und legt daraus einen
-   **Release-Entwurf** (Draft) an.
-5. In den GitHub Actions prüfen, dass alle vier Matrix-Jobs durchgelaufen
-   sind, dann den Entwurf unter *Releases* auf GitHub kurz durchsehen und
-   veröffentlichen. Bestehende Installationen finden das neue Release beim
-   nächsten App-Start automatisch über die eingebaute Update-Prüfung.
+   Linux, macOS (Apple Silicon + Intel) und Windows und veröffentlicht daraus
+   direkt ein GitHub Release (kein manueller Freigabe-Schritt, siehe
+   `releaseDraft: false`).
+5. In den GitHub Actions kurz prüfen, dass alle vier Matrix-Jobs
+   durchgelaufen sind. Bestehende Installationen finden das neue Release
+   beim nächsten App-Start automatisch über die eingebaute Update-Prüfung.
 
 ## Architektur des Auto-Updates
 
@@ -394,6 +394,9 @@ weder einen eigenen Server noch Zusatzinfrastruktur:
    ohne veröffentlichten Tag) bleibt das Banner einfach unsichtbar – die App
    funktioniert normal weiter.
 
-Weil ein GitHub-Release erst nach manueller Freigabe des Entwurfs (Schritt 5
-oben) öffentlich sichtbar wird, lösen Zwischenstände in der Pipeline keine
-Auto-Updates bei bestehenden Nutzer:innen aus.
+Das Release wird direkt bei Fertigstellung der Pipeline veröffentlicht (kein
+Entwurf/manueller Freigabe-Schritt) - jeder erfolgreich gebaute Tag-Push löst
+also unmittelbar das Update-Banner bei bestehenden Nutzer:innen aus. Bewusst
+so gewählt, weil die kleine Nutzerzahl eine manuelle Vorab-Prüfung nicht
+aufwiegt; bei Bedarf lässt sich das über `releaseDraft: true` in
+`release.yml` wieder umkehren.

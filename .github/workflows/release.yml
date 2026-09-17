@@ -96,6 +96,6 @@ jobs:
           releaseBody: |
             Installer für Linux, macOS und Windows unten unter "Assets".
             Siehe Commit-Historie für Details zu diesem Release.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
