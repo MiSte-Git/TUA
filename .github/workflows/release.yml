@@ -183,16 +183,24 @@ jobs:
           TAG: ${{ github.ref_name }}
         with:
           script: |
-            // Ueber den Tag nachschlagen statt der ueber Job-Outputs
-            // gecachten release_id zu vertrauen - so findet dieser Schritt
-            // immer das tatsaechlich existierende Release fuer den Tag,
-            // auch wenn die urspruenglich angelegte ID (z.B. durch einen
-            // doppelten Run oder manuelles Aufraeumen) nicht mehr stimmt.
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            // WICHTIG: repos.getReleaseByTag() liefert laut GitHub-Doku
+            // NUR veroeffentlichte Releases - ein Draft (genau das, was
+            // create-release anlegt) wird darueber nie gefunden (404).
+            // Stattdessen ueber listReleases() suchen, das inkl. Drafts
+            // zurueckgibt (der Workflow-Token hat contents: write / push
+            // access), und darin nach dem Tag filtern. So ist der Schritt
+            // unabhaengig von der ueber Jobs hinweg gecachten release_id
+            // und funktioniert unabhaengig davon, welcher Run das Release
+            // angelegt hat.
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: process.env.TAG
+              per_page: 100
             })
+            const release = releases.find(r => r.tag_name === process.env.TAG)
+            if (!release) {
+              throw new Error(`Kein Release fuer Tag ${process.env.TAG} gefunden`)
+            }
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
