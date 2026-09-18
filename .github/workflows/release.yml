@@ -25,6 +25,15 @@ on:
     tags:
       - "v*.*.*"
 
+# Verhindert, dass ein doppelt/erneut gepushter Tag zwei parallele Runs
+# auslegt, die beide unabhaengig voneinander ein Release fuer denselben
+# Tag anlegen (genau das ist am 17.09. passiert: zwei Runs, zwei Draft-
+# Releases, am Ende zeigte publish-release auf eine bereits geloeschte
+# Release-ID -> 404 beim updateRelease).
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -171,12 +180,22 @@ jobs:
       - name: Release veröffentlichen (Entwurf aufheben)
         uses: actions/github-script@v7
         env:
-          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          TAG: ${{ github.ref_name }}
         with:
           script: |
+            // Ueber den Tag nachschlagen statt der ueber Job-Outputs
+            // gecachten release_id zu vertrauen - so findet dieser Schritt
+            // immer das tatsaechlich existierende Release fuer den Tag,
+            // auch wenn die urspruenglich angelegte ID (z.B. durch einen
+            // doppelten Run oder manuelles Aufraeumen) nicht mehr stimmt.
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.TAG
+            })
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: process.env.RELEASE_ID,
+              release_id: release.id,
               draft: false
             })
