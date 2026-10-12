@@ -1,6 +1,6 @@
 # Telegram User Activities
 
-**Aktuelle Version:** 0.3.0
+**Aktuelle Version:** 0.4.0
 
 Desktop-Applikation zur Analyse der Mitgliederaktivität in Telegram-Gruppen und -Kanälen. Zeigt pro Mitglied Nachrichtenanzahl und Reaktionen; ermöglicht zusätzlich die gezielte Suche nach dem frühesten Nachweis eines bestimmten Benutzers sowie nach Ein- und Austrittsereignissen im Chatverlauf.
 
@@ -177,7 +177,9 @@ rm -rf ~/.local/share/tua
 
 ## Erste Verwendung
 
-1. App starten.
+Voraussetzungen: ein eigenes Telegram-Konto, eigene API-Zugangsdaten (siehe [Telegram API-Zugangsdaten](#telegram-api-zugangsdaten)) und Mitgliedschaft im Chat, der ausgewertet werden soll. Die App liest mit deinem Konto, sie sieht also genau das, was du in Telegram auch siehst. Für Mitgliederliste, Beitrittsdaten und Bot-Erkennung sind in Kanälen und grossen Gruppen Admin-Rechte nötig. Die Statistik zeigt unter **Eigene Rechte**, ob das der Fall ist.
+
+1. App starten. Beim allerersten Start `api_id` und `api_hash` eingeben.
 2. Telefonnummer (mit Ländervorwahl, z. B. `+41791234567`) eingeben und **Verbinden** klicken.
 3. Den von Telegram per SMS / Telegram-App zugesandten Code eingeben.
 4. Bei Zwei-Faktor-Authentifizierung zusätzlich das Cloud-Passwort eingeben.
@@ -197,33 +199,56 @@ rm -rf ~/.local/share/tua
 
 ### Layout
 
-Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeinsam genutzt. Darunter befinden sich drei Tabs:
+Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeinsam genutzt. Darunter befinden sich vier Tabs:
 
 | Tab | Funktion |
 |---|---|
-| **Aktivitätsanalyse** | Nachrichten- und Reaktionsstatistik für alle Mitglieder im gewählten Zeitraum |
+| **Aktivitätsanalyse** | Nachrichten-, Reaktions- und Umfragestatistik für alle Mitglieder im gewählten Zeitraum |
 | **Erste Erwähnung** | Frühester Nachweis eines bestimmten Benutzers im gesamten Chatverlauf |
 | **Ein/Austritt** | Suche nach Telegram-Service-Messages für hinzugefügt, beigetreten, verlassen und entfernt |
+| **Bots** | Alle Bots im Chat; einzelne Accounts lassen sich als „Kein Bot“ markieren |
 
 ### Tab „Aktivitätsanalyse"
 
 | Schritt | Aktion |
 |---|---|
-| **Gruppe auflösen** | t.me-Link oder `@username` in der Chat-URL-Eingabe oben eingeben → **Verbinden** |
-| **Analysezeitraum** | 1 – 24 Monate wählen |
-| **Reaktionen** | Optional: Reaktionen mitzählen (dauert länger) |
-| **Analyse starten** | Scannt alle Nachrichten im Zeitraum |
-| **Schwellenwert** | Mindestnachrichten- und Reaktionszahl für „aktiv" festlegen |
-| **Ausschließen** | Zeile anklicken, um Mitglied manuell aus der Zählung zu nehmen |
+| **Chat auswählen** | t.me-Link, `t.me/c/<ID>` oder `@username` in der Chat-URL-Eingabe oben eingeben → **Verbinden** |
+| **Analysezeitraum** | Letzter Monat, 3, 6, 9 oder 12 Monate oder eigener Zeitraum von/bis |
+| **Reaktionen einbeziehen** | Optional: Reaktionen mitzählen (deutlich langsamer, ein API-Aufruf pro Nachricht) |
+| **Analyse starten** | Scannt die Nachrichten im Zeitraum, bei gespeicherten Daten nur das Fehlende |
+| **Mindest-Nachrichten** | Wer weniger Nachrichten hat, gilt als nicht aktiv und zählt nicht zu „Wirklich aktiv“ |
+| **Mindest-Reaktionen / -Umfragen-Teilnahmen** | Nur zur Hervorhebung in der Tabelle und Dokumentation im Export, kein Aktiv-Kriterium |
+| **Ausschliessen** | Zeile anklicken, um ein Mitglied manuell aus der Zählung zu nehmen (erneut klicken zum Einschliessen) |
+| **ST markieren** | In der Spalte ST ein Mitglied als Servant Team markieren; die Statistik zeigt dann eigene ST-Werte |
 | **Exportieren** | Button oben rechts in der Statistik: Zusammenfassung und alle Einzeldaten als CSV speichern |
+
+Filter wie Mindest-Nachrichten, Ausschluss oder ST wirken sofort auf Tabelle und Statistik, ohne neuen Scan. Ausschlüsse und ST-Markierungen werden pro Chat gespeichert.
 
 #### Spalten in der Ergebnistabelle
 
 | Spalte | Beschreibung |
 |---|---|
-| Name / @username | Anzeigename und Benutzername |
+| Name / @username | Anzeigename und Benutzername, 🤖 bei Bots |
+| Beitritt | Datum des (letzten) Beitritts zum Chat |
 | Nachrichten | Anzahl eigener Nachrichten im Zeitraum |
+| Letzte Nachricht | Datum der letzten Nachricht im Zeitraum |
+| Online-Status | Per Klick abrufbar (ein API-Aufruf pro Mitglied) |
 | Reaktionen | Anzahl gesetzter Reaktionen (nur bei aktivierter Option) |
+| Umfragen / Umfragen % | Teilnahmen an Umfragen und Anteil an allen Umfragen im Zeitraum |
+| Quizze | Teilnahmen an Quiz-Umfragen |
+| ST | Markierung Servant Team (anklickbar) |
+
+Spalten erscheinen nur, wenn es im Zeitraum entsprechende Daten gibt. Alle Spalten lassen sich per Klick auf die Überschrift sortieren; über das Suchfeld wird nach Name oder @username gefiltert.
+
+#### Markierungen in der Tabelle
+
+| Darstellung | Bedeutung |
+|---|---|
+| Gelber Balken links, Badge „zählt nicht“, gelbe Nachrichtenzahl | Weniger Nachrichten als Mindest-Nachrichten, zählt nicht zu „Wirklich aktiv“ |
+| Roter Balken links, Name durchgestrichen | Manuell ausgeschlossen |
+| Grüner Hintergrund | Als Servant Team markiert |
+
+Die Legende über der Tabelle zeigt die Anzahl der nicht aktiven und ausgeschlossenen Mitglieder.
 
 #### Gespeicherte Daten (kein unnötiges Neu-Einlesen)
 
@@ -320,6 +345,10 @@ Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sich
 #### CSV-Export (Ein/Austritt)
 
 Nach einer Suche erscheint oben rechts in der Ergebnis-Karte **⤓ Exportieren**. Dateiname: `<Chat>_Ein-Austritt_<User>_<von>_bis_<bis>_<Exportdatum>.csv`. Im Header stehen Suchbegriff, ausgewähltes Mitglied, Ereignistypen und Zeitraum der Suche; danach eine Zeile pro Ereignis (`event, date, time_utc, affected_user, affected_user_id, affected_username, actor, actor_user_id, chat_id, message_id`).
+
+### Tab „Bots"
+
+Listet alle Bots des Chats (unabhängig vom Analysezeitraum). Accounts, die fälschlich als Bot erkannt werden, lassen sich als **Kein Bot** markieren; sie werden dann in Statistik und Tabelle wie normale Mitglieder behandelt. Die Markierung wird pro Chat gespeichert.
 
 ---
 
