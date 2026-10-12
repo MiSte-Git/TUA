@@ -3,7 +3,8 @@ mod telegram;
 
 use telegram::{
     AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
-    FirstMentionResult, JoinLeaveSearchResult, UserOnlineStatus,
+    FirstMentionResult, JoinLeaveEvent, JoinLeaveExportFilter, JoinLeaveSearchResult,
+    UserOnlineStatus,
 };
 
 // ── Credentials commands ──────────────────────────────────────────────────────
@@ -199,6 +200,8 @@ async fn export_csv(
     path: String,
     min_messages: u32,
     min_reactions: u32,
+    min_poll_participations: u32,
+    include_reactions: bool,
     excluded_ids: Vec<i64>,
     st_ids: Vec<i64>,
 ) -> Result<(), String> {
@@ -208,6 +211,8 @@ async fn export_csv(
         std::path::Path::new(&path),
         min_messages,
         min_reactions,
+        min_poll_participations,
+        include_reactions,
         &excluded_ids,
         &st_ids,
     )
@@ -215,8 +220,24 @@ async fn export_csv(
 }
 
 #[tauri::command]
-fn suggested_filename(chat_info: ChatInfo) -> String {
-    telegram::export::suggested_filename(&chat_info)
+async fn export_join_leave_csv(
+    events: Vec<JoinLeaveEvent>,
+    chat_info: ChatInfo,
+    path: String,
+    filter: JoinLeaveExportFilter,
+) -> Result<(), String> {
+    telegram::export::export_join_leave_csv(
+        &events,
+        &chat_info,
+        std::path::Path::new(&path),
+        &filter,
+    )
+    .map_err(|e: ExportError| e.to_string())
+}
+
+#[tauri::command]
+fn suggested_filename(chat_info: ChatInfo, period: Option<String>) -> String {
+    telegram::export::suggested_filename(&chat_info, period.as_deref().unwrap_or(""))
 }
 
 // ── Member list command ───────────────────────────────────────────────────────
@@ -318,6 +339,7 @@ pub fn run() {
             cancel_analysis,
             fetch_user_status,
             export_csv,
+            export_join_leave_csv,
             suggested_filename,
             load_chat_members,
             cancel_first_mention,

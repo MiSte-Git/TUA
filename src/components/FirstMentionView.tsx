@@ -2,14 +2,22 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
+import { save } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import type {
+  ChatInfo,
   FirstMentionResult,
   ChatMember,
   JoinLeaveEventType,
   JoinLeaveSearchResult,
 } from "../types";
 import { useElapsedTimer } from "../hooks/useElapsedTimer";
+import {
+  loadLastExportDir,
+  normalizeDate,
+  saveLastExportDir,
+  todayIso,
+} from "../utils/exportDir";
 
 interface Props {
   chatId?: number | null;
@@ -53,13 +61,28 @@ const joinLeaveLabels: Record<JoinLeaveEventType, string> = {
   removed: "entfernt",
 };
 
+interface JoinLeaveSearchParams {
+  search: string;
+  user_id: number | null;
+  username: string | null;
+  display_name: string | null;
+  event_types: JoinLeaveEventType[];
+  date_from: string | null;
+  date_to: string | null;
+}
+
 export function JoinLeaveView({
   chatId,
+  chatInfo,
   clearLogs,
 }: {
   chatId?: number | null;
+  chatInfo?: ChatInfo | null;
   clearLogs: () => void;
 }) {
+  const { t } = useTranslation();
+  const [lastSearch, setLastSearch] = useState<JoinLeaveSearchParams | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<JoinLeaveSearchResult | null>(null);
@@ -92,6 +115,8 @@ export function JoinLeaveView({
     setSelectedMember(null);
     setDateFrom("");
     setDateTo("");
+    setLastSearch(null);
+    setExportError(null);
   }, [chatId]);
 
   useEffect(() => {
@@ -194,17 +219,28 @@ export function JoinLeaveView({
     setError(null);
     setCancelled(false);
     setFocused(false);
+    setExportError(null);
+    const params: JoinLeaveSearchParams = {
+      search: query,
+      user_id: matchedMember?.user_id ?? null,
+      username: matchedMember?.username ?? (normalizedUsername || null),
+      display_name: matchedMember?.name ?? (query && !query.startsWith("@") ? query : null),
+      event_types: [...eventTypes],
+      date_from: dateFrom || null,
+      date_to: dateTo || null,
+    };
     try {
       const res = await invoke<JoinLeaveSearchResult>("find_join_leave_events", {
         chatId,
-        userId: matchedMember?.user_id ?? null,
-        username: matchedMember?.username ?? (normalizedUsername || null),
-        displayName: matchedMember?.name ?? (query && !query.startsWith("@") ? query : null),
-        eventTypes,
-        dateFrom: dateFrom || null,
-        dateTo: dateTo || null,
+        userId: params.user_id,
+        username: params.username,
+        displayName: params.display_name,
+        eventTypes: params.event_types,
+        dateFrom: params.date_from,
+        dateTo: params.date_to,
       });
       setResult(res);
+      setLastSearch(params);
     } catch (e) {
       const msg = String(e);
       if (msg.includes("Abgebrochen")) {
@@ -242,6 +278,36 @@ export function JoinLeaveView({
     }
     if (e.key === "Enter" && !loading) {
       handleSearch();
+    }
+  }
+
+  async function handleExport() {
+    if (!result || !lastSearch || !chatInfo) return;
+    setExportError(null);
+    try {
+      const from = normalizeDate(lastSearch.date_from) ?? "Anfang";
+      const to = normalizeDate(lastSearch.date_to) ?? todayIso();
+      const who = (lastSearch.username ? `@${lastSearch.username}` : lastSearch.search).replace(/^@/, "");
+      const suggested = await invoke<string>("suggested_filename", {
+        chatInfo,
+        period: `Ein-Austritt_${who}_${from}_bis_${to}`,
+      });
+      const lastDir = loadLastExportDir();
+      const defaultPath = lastDir ? `${lastDir}/${suggested}` : suggested;
+      const path = await save({
+        defaultPath,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (!path) return;
+      saveLastExportDir(path);
+      await invoke("export_join_leave_csv", {
+        events: result.events,
+        chatInfo,
+        path,
+        filter: lastSearch,
+      });
+    } catch (e) {
+      setExportError(String(e));
     }
   }
 
@@ -406,6 +472,19 @@ export function JoinLeaveView({
 
       {result && (
         <div className="bg-[#2a2a3e] rounded-xl p-4 overflow-auto">
+          {lastSearch && chatInfo && (
+            <div className="flex items-center gap-3 mb-3">
+              <button
+                onClick={handleExport}
+                className="bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
+              >
+                {t("stats.export_csv")}
+              </button>
+              {exportError && (
+                <span className="text-[#e05555] text-xs">{exportError}</span>
+              )}
+            </div>
+          )}
           {result.events.length === 0 ? (
             <p className="text-[#888aaa] text-sm">Keine Ein-/Austrittsereignisse gefunden.</p>
           ) : (

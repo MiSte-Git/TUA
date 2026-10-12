@@ -35,7 +35,7 @@ pub struct FirstMentionResult {
     pub joined_at_is_rejoin: bool,         // true when user was active before current join
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct JoinLeaveEvent {
     pub event_type: String, // "added" | "joined" | "left" | "removed"
     pub date: String,       // ISO 8601

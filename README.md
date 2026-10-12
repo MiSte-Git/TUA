@@ -227,10 +227,13 @@ Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeins
 
 #### CSV-Export
 
-Der Export enthält einen Metadaten-Header (Kommentarzeilen mit `#`) sowie eine Datenzeile pro Mitglied mit den Feldern:
+Dateiname: `<Chat>_<Zeitraum>_<Exportdatum>.csv`, z. B. `QSI_Germany_Chat_letzte_3_Monate_2026-10-12.csv`.
+
+Der Export enthält einen Metadaten-Header (Kommentarzeilen mit `#`) mit Chat-Angaben, **allen verwendeten Filteroptionen** (Zeitraum, Reaktionen einbezogen, Mindest-Nachrichten, Mindest-Reaktionen, Mindest-Umfrageteilnahmen, Anzahl ausgeschlossener und ST-Mitglieder) und einer Ergebnis-Zusammenfassung. Danach folgt eine Datenzeile pro Mitglied:
 
 ```
-user_id, name, username, message_count, reaction_count, active, excluded
+user_id, name, username, joined_date, first_message_date, last_message_date, message_count,
+last_reaction_date, reaction_count, poll_participations, last_poll_date, is_bot, active, excluded, servant_team
 ```
 
 ### Tab „Erste Erwähnung"
@@ -283,6 +286,10 @@ Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sich
 `Ein-/Austritt-Suche abgeschlossen. 43956 Historieneinträge geprüft, davon 475 Service-Messages, 4 Treffer gefunden. Dauer: 7m 25s.`
 
 > **Hinweis:** Große Archivierungs- oder Importblöcke können die Suche verlangsamen, ohne das Ergebnis zu verfälschen. Wenn das gesuchte Ereignis sicher nach einem bekannten Archivierungsblock liegt, kann `Zurück bis Datum` entsprechend enger gesetzt werden.
+
+#### CSV-Export (Ein/Austritt)
+
+Nach einer Suche erscheint **↓ CSV exportieren**. Dateiname: `<Chat>_Ein-Austritt_<User>_<von>_bis_<bis>_<Exportdatum>.csv`. Im Header stehen Suchbegriff, ausgewähltes Mitglied, Ereignistypen und Zeitraum der Suche; danach eine Zeile pro Ereignis (`event, date, time_utc, affected_user, affected_user_id, affected_username, actor, actor_user_id, chat_id, message_id`).
 
 ---
 

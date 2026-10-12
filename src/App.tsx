@@ -185,7 +185,7 @@ export default function App() {
           />
         )}
         {activeTab === "join_leave" && (
-          <JoinLeaveView chatId={chatInfo?.id} clearLogs={() => setLogs([])} />
+          <JoinLeaveView chatId={chatInfo?.id} chatInfo={chatInfo} clearLogs={() => setLogs([])} />
         )}
         {activeTab === "bots" && (
           <BotList

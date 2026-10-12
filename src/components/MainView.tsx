@@ -7,6 +7,7 @@ import PeriodSelector from "./PeriodSelector";
 import Controls from "./Controls";
 import ResultsTable from "./ResultsTable";
 import Tooltip from "./Tooltip";
+import { loadLastExportDir, saveLastExportDir } from "../utils/exportDir";
 
 interface Props {
   chatInfo: ChatInfo | null;
@@ -45,19 +46,6 @@ function loadExcluded(chatId: number) { return loadMap(EXCLUDED_KEY(chatId)); }
 function saveExcluded(chatId: number, map: Map<number, string>) { saveMap(EXCLUDED_KEY(chatId), map); }
 function loadST(chatId: number) { return loadMap(ST_KEY(chatId)); }
 function saveST(chatId: number, map: Map<number, string>) { saveMap(ST_KEY(chatId), map); }
-
-const LAST_EXPORT_DIR_KEY = "last_csv_export_dir";
-
-function loadLastExportDir(): string | null {
-  return localStorage.getItem(LAST_EXPORT_DIR_KEY);
-}
-
-function saveLastExportDir(filePath: string) {
-  const lastSep = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
-  if (lastSep > 0) {
-    localStorage.setItem(LAST_EXPORT_DIR_KEY, filePath.substring(0, lastSep));
-  }
-}
 
 function fmt(n: number) {
   return n.toLocaleString("de-CH");
@@ -199,8 +187,13 @@ export default function MainView({
   async function handleExport() {
     if (!result || !chatInfo) return;
     try {
+      const period =
+        result.period_months > 0
+          ? `letzte_${result.period_months}_Monate`
+          : `${result.period_from ?? "Anfang"}_bis_${result.period_to ?? "heute"}`;
       const suggested = await invoke<string>("suggested_filename", {
         chatInfo,
+        period,
       });
       const lastDir = loadLastExportDir();
       const defaultPath = lastDir ? `${lastDir}/${suggested}` : suggested;
@@ -216,6 +209,8 @@ export default function MainView({
           path,
           minMessages,
           minReactions,
+          minPollParticipations,
+          includeReactions,
           excludedIds: Array.from(excludedMembers.keys()),
           stIds: Array.from(stMembers.keys()),
         });
