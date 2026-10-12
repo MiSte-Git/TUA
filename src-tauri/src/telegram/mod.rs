@@ -1,5 +1,6 @@
 pub mod analysis;
 pub mod auth;
+pub mod cache;
 pub mod export;
 pub mod mention;
 

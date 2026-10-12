@@ -225,6 +225,18 @@ Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeins
 | Nachrichten | Anzahl eigener Nachrichten im Zeitraum |
 | Reaktionen | Anzahl gesetzter Reaktionen (nur bei aktivierter Option) |
 
+#### Gespeicherte Daten (kein unnötiges Neu-Einlesen)
+
+Die Rohdaten jeder Analyse (jede Aktivität mit Zeitstempel, Umfragen, Namen, Beitrittsdaten) werden pro Chat auf der Platte gespeichert: `~/.local/share/tua/cache/<chat_id>.json` (Linux), `%LOCALAPPDATA%\tua\cache\` (Windows), `~/Library/Application Support/tua/cache/` (macOS). Nachrichtentexte werden nicht gespeichert.
+
+- **Filter ändern** (Mindest-Nachrichten, Reaktionen, Umfragen, Ausschluss, ST): Tabelle und Statistik rechnen sofort neu, kein Scan.
+- **Zeitraum verkleinern** (z. B. 9 → 3 Monate) oder Reaktionen ausblenden: Ergebnis wird sofort aus den gespeicherten Daten berechnet. Die gespeicherten Daten bleiben vollständig, zurück auf 9 Monate geht ebenfalls sofort.
+- **Zeitraum vergrössern**: Hinweis unter den Steuerelementen. **Start** lädt nur den fehlenden älteren Teil nach.
+- **Neue Nachrichten**: **Start** lädt nur die Nachrichten seit dem letzten Stand nach und führt sie mit den gespeicherten Daten zusammen.
+- **Komplett neu einlesen**: verwirft die gespeicherten Daten des Chats und scannt den gewählten Zeitraum neu. Nötig z. B., um Umfragestimmen zu erfassen, die nach dem Scan noch abgegeben wurden, oder wenn Reaktionen erstmals einbezogen werden sollen (das passiert dann automatisch).
+
+Unter den Steuerelementen steht, welcher Zeitraum gespeichert ist und bis wann die Daten aktuell sind. Der Export enthält immer genau den angezeigten Zeitraum.
+
 #### CSV-Export
 
 Button **⤓ Exportieren** oben rechts in der Statistik-Karte. Es werden immer zwei Dateien geschrieben:

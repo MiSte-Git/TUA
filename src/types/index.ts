@@ -83,6 +83,14 @@ export interface AnalysisResult {
   events?: ActivityEvent[];        // every counted activity with date
 }
 
+export interface CacheStatus {
+  from_ts: number;
+  to_ts: number;
+  updated_at: number;
+  include_reactions: boolean;
+  events: number;
+}
+
 // ── Members ───────────────────────────────────────────────────────────────────
 
 export interface ChatMember {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
-import type { AppPhase, AnalysisResult, ChatInfo } from "../types";
+import type { AppPhase, AnalysisResult, CacheStatus, ChatInfo } from "../types";
 import PeriodSelector from "./PeriodSelector";
 import Controls from "./Controls";
 import ResultsTable from "./ResultsTable";
@@ -114,6 +114,50 @@ export default function MainView({
   const [analyzing, setAnalyzing] = useState(false);
   const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const cancelledRef = useRef(false);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
+  // true when the selected period is not fully covered by stored data
+  const [needsScan, setNeedsScan] = useState(false);
+  const deriveSeq = useRef(0);
+
+  const isoFrom = months === 0 && dateFrom ? dateFrom.toLocaleDateString("en-CA") : null;
+  const isoTo = months === 0 && dateTo ? dateTo.toLocaleDateString("en-CA") : null;
+
+  async function refreshCacheStatus(chatId: number) {
+    try {
+      setCacheStatus(await invoke<CacheStatus | null>("analysis_cache_status", { chatId }));
+    } catch {
+      setCacheStatus(null);
+    }
+  }
+
+  // Changing period/reactions: recompute from stored data without a new scan,
+  // as long as the stored data covers the selected period.
+  useEffect(() => {
+    if (!chatInfo || analyzing) return;
+    if (months === 0 && !isoFrom) return;
+    const seq = ++deriveSeq.current;
+    invoke<AnalysisResult | null>("analysis_from_cache", {
+      chatId: chatInfo.id,
+      months,
+      includeReactions,
+      dateFrom: isoFrom,
+      dateTo: isoTo,
+    })
+      .then((res) => {
+        if (seq !== deriveSeq.current) return;
+        if (res) {
+          setResult(res);
+          setNeedsScan(false);
+        } else {
+          setNeedsScan(true);
+        }
+      })
+      .catch(() => {
+        if (seq === deriveSeq.current) setNeedsScan(true);
+      });
+    refreshCacheStatus(chatInfo.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatInfo, months, isoFrom, isoTo, includeReactions]);
 
   useEffect(() => {
     if (!chatInfo) return;
@@ -147,8 +191,9 @@ export default function MainView({
     });
   }
 
-  async function handleStart() {
+  async function handleStart(forceFull = false) {
     cancelledRef.current = false;
+    deriveSeq.current++;
     clearLogs();
     setAnalyzing(true);
     setPhase("analyzing");
@@ -158,11 +203,13 @@ export default function MainView({
         chatUrl,
         months,
         includeReactions,
-        dateFrom: months === 0 ? (dateFrom ? dateFrom.toLocaleDateString("en-CA") : null) : null,
-        dateTo: months === 0 ? (dateTo ? dateTo.toLocaleDateString("en-CA") : null) : null,
+        dateFrom: isoFrom,
+        dateTo: isoTo,
+        forceFull,
       });
       if (!cancelledRef.current) {
         setResult(res);
+        setNeedsScan(false);
       }
     } catch (_e) {
       // errors arrive via Rust → 'log' event
@@ -173,7 +220,15 @@ export default function MainView({
         setProgress(0);
         setScannedMessages(0);
       }
+      if (chatInfo) refreshCacheStatus(chatInfo.id);
     }
+  }
+
+  function fmtTs(ts: number, withTime = false) {
+    const d = new Date(ts * 1000);
+    const p = (n: number) => String(n).padStart(2, "0");
+    const date = `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+    return withTime ? `${date} ${p(d.getHours())}:${p(d.getMinutes())}` : date;
   }
 
   function handleStop() {
@@ -306,7 +361,7 @@ export default function MainView({
         <Controls
           chatInfo={chatInfo}
           months={months}
-          onStart={handleStart}
+          onStart={() => handleStart(false)}
           onStop={handleStop}
           analyzing={analyzing}
           includeReactions={includeReactions}
@@ -318,6 +373,36 @@ export default function MainView({
           onChangeMinReactions={setMinReactions}
           onChangeMinPollParticipations={setMinPollParticipations}
         />
+        {chatInfo && (
+          <div className="mt-3 pt-3 border-t border-[#3a3a5a] flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            {cacheStatus ? (
+              <span className="text-[#888aaa]">
+                {t("cache.stored", {
+                  from: fmtTs(cacheStatus.from_ts),
+                  to: fmtTs(cacheStatus.to_ts, true),
+                  count: cacheStatus.events,
+                })}
+                {cacheStatus.include_reactions ? ` · ${t("cache.with_reactions")}` : ""}
+              </span>
+            ) : (
+              <span className="text-[#888aaa]">{t("cache.none")}</span>
+            )}
+            {needsScan && cacheStatus && (
+              <span className="text-amber-400">{t("cache.needs_scan")}</span>
+            )}
+            {cacheStatus && (
+              <button
+                type="button"
+                onClick={() => handleStart(true)}
+                disabled={analyzing}
+                title={t("cache.rescan_tooltip")}
+                className="ml-auto text-[#888aaa] hover:text-[#e0e0f0] px-2 py-0.5 rounded border border-[#3a3a5a] hover:border-[#7c6af7] transition-colors disabled:opacity-50"
+              >
+                {t("cache.rescan")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Statistik (2 Spalten) */}

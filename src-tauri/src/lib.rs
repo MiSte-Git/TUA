@@ -165,6 +165,7 @@ async fn run_analysis(
     include_reactions: bool,
     date_from: Option<String>,
     date_to: Option<String>,
+    force_full: Option<bool>,
     app: tauri::AppHandle,
 ) -> Result<AnalysisResult, String> {
     telegram::analysis::run_analysis(
@@ -173,10 +174,28 @@ async fn run_analysis(
         include_reactions,
         date_from,
         date_to,
+        force_full.unwrap_or(false),
         app,
     )
     .await
     .map_err(|e: AnalysisError| e.to_string())
+}
+
+#[tauri::command]
+fn analysis_from_cache(
+    chat_id: i64,
+    months: i32,
+    include_reactions: bool,
+    date_from: Option<String>,
+    date_to: Option<String>,
+) -> Result<Option<AnalysisResult>, String> {
+    telegram::analysis::analysis_from_cache(chat_id, months, include_reactions, date_from, date_to)
+        .map_err(|e: AnalysisError| e.to_string())
+}
+
+#[tauri::command]
+fn analysis_cache_status(chat_id: i64) -> Option<telegram::cache::CacheStatus> {
+    telegram::analysis::cache_status(chat_id)
 }
 
 #[tauri::command]
@@ -326,6 +345,8 @@ pub fn run() {
             get_auth_status,
             resolve_chat,
             run_analysis,
+            analysis_from_cache,
+            analysis_cache_status,
             cancel_analysis,
             fetch_user_status,
             export_csv,

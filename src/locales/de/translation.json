@@ -159,5 +159,13 @@
     "done_one": "✓ {{count}} Datei gespeichert",
     "done_other": "✓ {{count}} Dateien gespeichert",
     "failed": "Export fehlgeschlagen"
+  },
+  "cache": {
+    "stored": "Gespeicherte Daten: {{from}} – {{to}} ({{count}} Aktivitäten)",
+    "with_reactions": "mit Reaktionen",
+    "none": "Noch keine gespeicherten Daten für diesen Chat. Start liest den Zeitraum ein.",
+    "needs_scan": "Gewählter Zeitraum ist nicht vollständig gespeichert. Start lädt nur das Fehlende nach.",
+    "rescan": "Komplett neu einlesen",
+    "rescan_tooltip": "Verwirft die gespeicherten Daten und scannt den gewählten Zeitraum komplett neu (z. B. um spätere Umfragestimmen zu erfassen)."
   }
 }

@@ -159,5 +159,13 @@
     "done_one": "✓ {{count}} file saved",
     "done_other": "✓ {{count}} files saved",
     "failed": "Export failed"
+  },
+  "cache": {
+    "stored": "Stored data: {{from}} – {{to}} ({{count}} activities)",
+    "with_reactions": "with reactions",
+    "none": "No stored data for this chat yet. Start scans the period.",
+    "needs_scan": "Selected period is not fully stored. Start only loads what is missing.",
+    "rescan": "Full rescan",
+    "rescan_tooltip": "Discards the stored data and rescans the selected period completely (e.g. to pick up later poll votes)."
   }
 }
