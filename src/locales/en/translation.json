@@ -171,5 +171,26 @@
     "needs_scan": "Selected period is not fully stored. Start only loads what is missing.",
     "rescan": "Full rescan",
     "rescan_tooltip": "Discards the stored data and rescans the selected period completely (e.g. to pick up later poll votes)."
+  },
+  "about": {
+    "button": "About",
+    "version": "Version",
+    "close": "Close",
+    "description": "Analyses member activity in Telegram groups and channels: messages, reactions and polls per member, a user's earliest activity, and joins and leaves. The app reads with your own Telegram account and changes nothing in the chat.",
+    "check_update": "Check for updates",
+    "checking": "Checking…",
+    "up_to_date": "✓ You have the latest version.",
+    "update_available": "Version {{version}} is available.",
+    "download": "Go to download page",
+    "check_failed": "Update check not possible (offline?).",
+    "source": "Source code",
+    "releases": "All releases",
+    "issues": "Report a bug",
+    "storage": "Local data",
+    "path_config": "API credentials",
+    "path_session": "Telegram session",
+    "path_cache": "Stored analysis data",
+    "privacy": "All data stays on this computer. No message texts are stored, only IDs, names, usernames and timestamps.",
+    "built_with": "Built with Tauri, React and grammers"
   }
 }

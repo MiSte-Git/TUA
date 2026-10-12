@@ -249,6 +249,25 @@ fn suggested_filename(chat_info: ChatInfo, period: Option<String>) -> String {
     telegram::export::suggested_filename(&chat_info, period.as_deref().unwrap_or(""))
 }
 
+// ── About / info ──────────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct AppPaths {
+    config: String,
+    session: String,
+    cache: String,
+}
+
+/// Local storage locations, shown in the About dialog.
+#[tauri::command]
+fn app_paths() -> AppPaths {
+    AppPaths {
+        config: config::config_path().display().to_string(),
+        session: telegram::auth::session_path().display().to_string(),
+        cache: telegram::cache::cache_dir().display().to_string(),
+    }
+}
+
 // ── Member list command ───────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -364,6 +383,7 @@ pub fn run() {
             run_analysis,
             analysis_from_cache,
             analysis_cache_status,
+            app_paths,
             cancel_analysis,
             fetch_user_status,
             export_csv,

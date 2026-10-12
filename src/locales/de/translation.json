@@ -171,5 +171,26 @@
     "needs_scan": "Gewählter Zeitraum ist nicht vollständig gespeichert. Start lädt nur das Fehlende nach.",
     "rescan": "Komplett neu einlesen",
     "rescan_tooltip": "Verwirft die gespeicherten Daten und scannt den gewählten Zeitraum komplett neu (z. B. um spätere Umfragestimmen zu erfassen)."
+  },
+  "about": {
+    "button": "Info",
+    "version": "Version",
+    "close": "Schliessen",
+    "description": "Analysiert die Mitgliederaktivität in Telegram-Gruppen und -Kanälen: Nachrichten, Reaktionen und Umfragen pro Mitglied, früheste Aktivität eines Benutzers sowie Ein- und Austritte. Die App liest mit deinem eigenen Telegram-Konto und verändert nichts im Chat.",
+    "check_update": "Nach Updates suchen",
+    "checking": "Suche…",
+    "up_to_date": "✓ Du hast die neueste Version.",
+    "update_available": "Version {{version}} ist verfügbar.",
+    "download": "Zur Download-Seite",
+    "check_failed": "Update-Prüfung nicht möglich (offline?).",
+    "source": "Quellcode",
+    "releases": "Alle Versionen",
+    "issues": "Fehler melden",
+    "storage": "Lokale Daten",
+    "path_config": "API-Zugangsdaten",
+    "path_session": "Telegram-Sitzung",
+    "path_cache": "Gespeicherte Analysedaten",
+    "privacy": "Alle Daten bleiben auf diesem Rechner. Gespeichert werden keine Nachrichtentexte, nur IDs, Namen, Usernames und Zeitstempel.",
+    "built_with": "Gebaut mit Tauri, React und grammers"
   }
 }

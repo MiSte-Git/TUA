@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import AboutDialog from "./components/AboutDialog";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import LoginFlow from "./components/LoginFlow";
@@ -16,6 +18,14 @@ import { invoke } from "@tauri-apps/api/core";
 type ActiveTab = "analysis" | "first_mention" | "join_leave" | "bots";
 
 export default function App() {
+  const [appVersion, setAppVersion] = useState("");
+  const [showAbout, setShowAbout] = useState(false);
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
+  const aboutDialog = showAbout ? (
+    <AboutDialog version={appVersion} onClose={() => setShowAbout(false)} />
+  ) : null;
   const { t } = useTranslation();
   const [phase, setPhase] = useState<AppPhase>("checking");
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
@@ -102,7 +112,14 @@ export default function App() {
         <div className="flex-1 flex items-center justify-center p-6">
           <LoginFlow onSuccess={() => setPhase("main")} />
         </div>
-        <StatusBar connected={false} progress={0} scannedMessages={0} />
+        <StatusBar
+          connected={false}
+          progress={0}
+          scannedMessages={0}
+          version={appVersion}
+          onAbout={() => setShowAbout(true)}
+        />
+        {aboutDialog}
       </div>
     );
   }
@@ -153,7 +170,15 @@ export default function App() {
               {t("tabs.bots")}
             </button>
           )}
-          <div className="ml-auto pr-1">
+          <div className="ml-auto pr-1 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAbout(true)}
+              title={t("about.button")}
+              className="w-7 h-7 rounded-full border border-[#3a3a5a] text-[#888aaa] hover:text-[#e0e0f0] hover:border-[#7c6af7] text-sm font-semibold transition-colors"
+            >
+              i
+            </button>
             <LanguageSelector />
           </div>
         </div>
@@ -197,7 +222,15 @@ export default function App() {
 
         <LogWindow logs={logs} />
       </main>
-      <StatusBar connected={connected} progress={progress} scannedMessages={scannedMessages} analyzing={phase === "analyzing"} />
+      <StatusBar
+        connected={connected}
+        progress={progress}
+        scannedMessages={scannedMessages}
+        analyzing={phase === "analyzing"}
+        version={appVersion}
+        onAbout={() => setShowAbout(true)}
+      />
+      {aboutDialog}
     </div>
   );
 }

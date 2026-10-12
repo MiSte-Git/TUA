@@ -7,13 +7,15 @@ interface Props {
   progress: number;
   scannedMessages: number;
   analyzing?: boolean;
+  version?: string;
+  onAbout?: () => void;
 }
 
 function fmt(n: number) {
   return n.toLocaleString("de-CH");
 }
 
-export default function StatusBar({ connected, progress, scannedMessages, analyzing = false }: Props) {
+export default function StatusBar({ connected, progress, scannedMessages, analyzing = false, version, onAbout }: Props) {
   const { t } = useTranslation();
   const { formatted } = useElapsedTimer(analyzing);
   const [finalDuration, setFinalDuration] = useState<string | null>(null);
@@ -69,6 +71,18 @@ export default function StatusBar({ connected, progress, scannedMessages, analyz
           </div>
           <span className="text-[#888aaa] text-xs tabular-nums">{progress}</span>
         </div>
+      )}
+
+      {/* Version, opens the About dialog */}
+      {version && (
+        <button
+          type="button"
+          onClick={onAbout}
+          title={t("about.button")}
+          className="ml-auto text-[#888aaa] hover:text-[#e0e0f0] text-xs tabular-nums transition-colors"
+        >
+          v{version}
+        </button>
       )}
     </div>
   );

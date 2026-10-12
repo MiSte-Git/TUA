@@ -116,12 +116,16 @@ impl ChatCache {
 
 // ── File handling ─────────────────────────────────────────────────────────────
 
-fn cache_path(chat_id: i64) -> PathBuf {
+/// Directory holding the per-chat cache files.
+pub fn cache_dir() -> PathBuf {
     let mut p = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     p.push("tua");
     p.push("cache");
-    p.push(format!("{}.json", chat_id));
     p
+}
+
+fn cache_path(chat_id: i64) -> PathBuf {
+    cache_dir().join(format!("{}.json", chat_id))
 }
 
 pub fn load(chat_id: i64) -> Option<ChatCache> {
