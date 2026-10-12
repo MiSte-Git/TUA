@@ -79,7 +79,7 @@ Ob ein solches Vorgehen im konkreten Fall zulässig ist, regeln die
 
 1. Von der [Releases-Seite](https://github.com/MiSte-Git/TUA/releases) die
    passende Datei für dein Betriebssystem laden:
-   - Windows: `.msi` oder `-setup.exe`
+   - Windows: **`-setup.exe`** (empfohlen; die `.msi` gibt es auch, siehe Hinweis unten)
    - macOS: `_aarch64.dmg` (Apple Silicon) oder `_x64.dmg` (Intel)
    - Linux: `.deb`, `.rpm` oder `.AppImage` (für automatische Updates **`.AppImage` empfehlenswert**, siehe Punkt 5 unten)
 2. Datei ausführen/installieren wie jedes andere Programm auf dem jeweiligen
@@ -103,6 +103,29 @@ Ob ein solches Vorgehen im konkreten Fall zulässig ist, regeln die
    AppImage-Installation selbst ersetzen – die App zeigt in dem Fall
    stattdessen einen Hinweis mit Link zur Releases-Seite für den manuellen
    Download.
+
+### Updates und Wechsel der Version
+
+Updates **ersetzen** die vorhandene Installation, es entsteht keine zweite.
+API-Zugangsdaten, Telegram-Sitzung und gespeicherte Analysedaten liegen im
+Benutzerordner (nicht im Programmordner) und bleiben bei jedem Update erhalten,
+ein erneutes Anmelden ist nicht nötig.
+
+| System / Datei | Manuelles Update von der Releases-Seite |
+|---|---|
+| Windows `-setup.exe` | erkennt die vorhandene Installation und ersetzt sie |
+| Windows `.msi` | ersetzt eine frühere **MSI**-Installation; ein Downgrade wird abgelehnt |
+| macOS `.dmg` | App in „Programme“ ziehen und „Ersetzen“ bestätigen |
+| Linux `.deb` / `.rpm` | der Paketmanager aktualisiert das vorhandene Paket |
+| Linux `.AppImage` | neue Datei liegt neben der alten, die alte kann gelöscht werden |
+
+> **Windows: `.msi` und `-setup.exe` nicht mischen.** Das sind zwei getrennte
+> Installationsarten, die nichts voneinander wissen. Wer erst die `.msi` und
+> später die `-setup.exe` installiert (oder umgekehrt), hat die App danach zweimal
+> in der Programmliste. Das Update in der App verwendet unter Windows die
+> `-setup.exe`-Variante. Deshalb für Windows **nur die `-setup.exe`** verwenden.
+> Falls es schon passiert ist: die `.msi`-Installation über
+> „Apps & Features“ deinstallieren; die Daten bleiben erhalten.
 
 ## Voraussetzungen
 
