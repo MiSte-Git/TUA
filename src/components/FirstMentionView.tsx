@@ -83,6 +83,7 @@ export function JoinLeaveView({
   const { t } = useTranslation();
   const [lastSearch, setLastSearch] = useState<JoinLeaveSearchParams | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportDone, setExportDone] = useState(false);
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<JoinLeaveSearchResult | null>(null);
@@ -220,6 +221,7 @@ export function JoinLeaveView({
     setCancelled(false);
     setFocused(false);
     setExportError(null);
+    setExportDone(false);
     const params: JoinLeaveSearchParams = {
       search: query,
       user_id: matchedMember?.user_id ?? null,
@@ -284,6 +286,7 @@ export function JoinLeaveView({
   async function handleExport() {
     if (!result || !lastSearch || !chatInfo) return;
     setExportError(null);
+    setExportDone(false);
     try {
       const from = normalizeDate(lastSearch.date_from) ?? "Anfang";
       const to = normalizeDate(lastSearch.date_to) ?? todayIso();
@@ -306,6 +309,7 @@ export function JoinLeaveView({
         path,
         filter: lastSearch,
       });
+      setExportDone(true);
     } catch (e) {
       setExportError(String(e));
     }
@@ -472,19 +476,26 @@ export function JoinLeaveView({
 
       {result && (
         <div className="bg-[#2a2a3e] rounded-xl p-4 overflow-auto">
-          {lastSearch && chatInfo && (
-            <div className="flex items-center gap-3 mb-3">
-              <button
-                onClick={handleExport}
-                className="bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
-              >
-                {t("stats.export_csv")}
-              </button>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
+              Ergebnis ({result.events.length} Treffer)
+            </p>
+            <div className="flex items-center gap-3">
               {exportError && (
                 <span className="text-[#e05555] text-xs">{exportError}</span>
               )}
+              {exportDone && !exportError && (
+                <span className="text-green-400 text-xs">{t("export.done", { count: 1 })}</span>
+              )}
+              <button
+                onClick={handleExport}
+                disabled={!lastSearch || !chatInfo}
+                className="bg-[#7c6af7] hover:bg-[#6a58e0] text-white text-sm font-semibold py-1.5 px-4 rounded-lg shadow transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {t("export.button")}
+              </button>
             </div>
-          )}
+          </div>
           {result.events.length === 0 ? (
             <p className="text-[#888aaa] text-sm">Keine Ein-/Austrittsereignisse gefunden.</p>
           ) : (

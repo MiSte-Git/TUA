@@ -22,6 +22,17 @@ pub struct BotMember {
     pub username: Option<String>,
 }
 
+/// A single dated activity, kept so exports can re-aggregate any sub-period.
+/// `kind`: "message" | "reaction" | "poll" | "quiz".
+/// For reactions `ts` is the date of the message reacted to (Telegram does not
+/// expose the reaction time).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ActivityEvent {
+    pub user_id: i64,
+    pub ts: i64,
+    pub kind: String,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatInfo {
     pub id: i64,
@@ -64,6 +75,12 @@ pub struct AnalysisResult {
     pub own_can_get_participants: bool,
     pub avg_poll_participants: f32,    // Ø eindeutige Voter pro Umfrage (nur echte Polls, keine Quizze)
     pub avg_quiz_participation: f32,   // Ø Quiz-Teilnahmen pro aktivem Teilnehmer
+    #[serde(default)]
+    pub scan_from: Option<String>,     // ISO date (UTC), effective start of the scan window
+    #[serde(default)]
+    pub scan_to: Option<String>,       // ISO date (UTC), effective end of the scan window
+    #[serde(default)]
+    pub events: Vec<ActivityEvent>,    // every counted activity with its date
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -309,6 +326,7 @@ pub async fn run_analysis(
 
     // user_id → (name, username, message_count, reaction_count, poll_participations, quiz_participations, last_message_date, last_reaction_date, last_poll_date, first_message_date)
     let mut activity: HashMap<i64, (String, Option<String>, u32, u32, u32, u32, Option<i64>, Option<i64>, Option<i64>, Option<i64>)> = HashMap::new();
+    let mut events: Vec<ActivityEvent> = Vec::new();
     let mut total_messages: u32 = 0;
     let mut total_polls: u32 = 0;
     let mut total_quizzes: u32 = 0;
@@ -372,6 +390,7 @@ pub async fn run_analysis(
                         entry.6 = Some(entry.6.map_or(msg_ts, |p| p.max(msg_ts)));
                         entry.9 = Some(entry.9.map_or(msg_ts, |p| p.min(msg_ts)));
                         total_messages += 1;
+                        events.push(ActivityEvent { user_id: uid, ts: msg_ts, kind: "message".into() });
 
                         // Fetch per-message reactions
                         if include_reactions {
@@ -384,6 +403,7 @@ pub async fn run_analysis(
                                         if let Some(e) = activity.get_mut(&reacting_uid) {
                                             e.3 += 1;
                                             e.7 = Some(e.7.map_or(msg_ts, |p| p.max(msg_ts)));
+                                            events.push(ActivityEvent { user_id: reacting_uid, ts: msg_ts, kind: "reaction".into() });
                                         }
                                     }
                                 }
@@ -436,6 +456,7 @@ pub async fn run_analysis(
                                     });
                                     entry.5 += 1; // quiz_participations
                                     entry.8 = Some(entry.8.map_or(poll_ts, |p| p.max(poll_ts)));
+                                    events.push(ActivityEvent { user_id: *uid, ts: poll_ts, kind: "quiz".into() });
                                 }
                             }
                         } else {
@@ -470,6 +491,7 @@ pub async fn run_analysis(
                                 });
                                 entry.4 += 1; // poll_participations
                                 entry.8 = Some(entry.8.map_or(poll_ts, |p| p.max(poll_ts)));
+                                events.push(ActivityEvent { user_id: *uid, ts: poll_ts, kind: "poll".into() });
                             }
                         }
                     }
@@ -649,6 +671,9 @@ pub async fn run_analysis(
         own_can_get_participants,
         avg_poll_participants,
         avg_quiz_participation,
+        scan_from: Some(cutoff.format("%Y-%m-%d").to_string()),
+        scan_to: Some(end_date.format("%Y-%m-%d").to_string()),
+        events,
     })
 }
 

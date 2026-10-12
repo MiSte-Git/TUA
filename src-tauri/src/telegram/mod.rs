@@ -5,5 +5,5 @@ pub mod mention;
 
 pub use analysis::{AnalysisError, AnalysisResult, ChatInfo, UserOnlineStatus};
 pub use auth::{AuthError, ConnectResult};
-pub use export::{ExportError, JoinLeaveExportFilter};
+pub use export::{ActivityExportOptions, ExportError, JoinLeaveExportFilter};
 pub use mention::{ChatMember, FirstMentionResult, JoinLeaveEvent, JoinLeaveSearchResult};

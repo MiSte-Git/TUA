@@ -57,6 +57,12 @@ export interface UserOnlineStatus {
   was_online: number | null; // Unix timestamp, nur bei kind === "offline"
 }
 
+export interface ActivityEvent {
+  user_id: number;
+  ts: number; // Unix timestamp (UTC)
+  kind: "message" | "reaction" | "poll" | "quiz";
+}
+
 export interface AnalysisResult {
   chat: ChatInfo;
   members: MemberActivity[];
@@ -72,6 +78,9 @@ export interface AnalysisResult {
   own_can_get_participants: boolean;
   avg_poll_participants: number;
   avg_quiz_participation: number;
+  scan_from?: string | null;       // ISO date (UTC), effective scan start
+  scan_to?: string | null;         // ISO date (UTC), effective scan end
+  events?: ActivityEvent[];        // every counted activity with date
 }
 
 // ── Members ───────────────────────────────────────────────────────────────────

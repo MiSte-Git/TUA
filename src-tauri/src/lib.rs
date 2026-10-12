@@ -2,7 +2,7 @@ mod config;
 mod telegram;
 
 use telegram::{
-    AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
+    ActivityExportOptions, AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
     FirstMentionResult, JoinLeaveEvent, JoinLeaveExportFilter, JoinLeaveSearchResult,
     UserOnlineStatus,
 };
@@ -198,23 +198,13 @@ async fn export_csv(
     result: AnalysisResult,
     chat_info: ChatInfo,
     path: String,
-    min_messages: u32,
-    min_reactions: u32,
-    min_poll_participations: u32,
-    include_reactions: bool,
-    excluded_ids: Vec<i64>,
-    st_ids: Vec<i64>,
-) -> Result<(), String> {
+    options: ActivityExportOptions,
+) -> Result<Vec<String>, String> {
     telegram::export::export_csv(
         &result,
         &chat_info,
         std::path::Path::new(&path),
-        min_messages,
-        min_reactions,
-        min_poll_participations,
-        include_reactions,
-        &excluded_ids,
-        &st_ids,
+        &options,
     )
     .map_err(|e: ExportError| e.to_string())
 }

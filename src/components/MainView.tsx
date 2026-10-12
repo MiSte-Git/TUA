@@ -112,6 +112,7 @@ export default function MainView({
   const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
   const [stMembers, setStMembers] = useState<Map<number, string>>(new Map());
   const [analyzing, setAnalyzing] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -185,12 +186,15 @@ export default function MainView({
   }
 
   async function handleExport() {
+    setExportStatus(null);
     if (!result || !chatInfo) return;
     try {
+      const from = result.scan_from ?? result.period_from;
+      const to = result.scan_to ?? result.period_to;
       const period =
-        result.period_months > 0
-          ? `letzte_${result.period_months}_Monate`
-          : `${result.period_from ?? "Anfang"}_bis_${result.period_to ?? "heute"}`;
+        from && to
+          ? `${from}_bis_${to}`
+          : `letzte_${result.period_months}_Monate`;
       const suggested = await invoke<string>("suggested_filename", {
         chatInfo,
         period,
@@ -201,22 +205,24 @@ export default function MainView({
         defaultPath,
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
-      if (path) {
-        saveLastExportDir(path);
-        await invoke("export_csv", {
-          result,
-          chatInfo,
-          path,
-          minMessages,
-          minReactions,
-          minPollParticipations,
-          includeReactions,
-          excludedIds: Array.from(excludedMembers.keys()),
-          stIds: Array.from(stMembers.keys()),
-        });
-      }
-    } catch (_e) {
-      // ignore cancel
+      if (!path) return;
+      saveLastExportDir(path);
+      const written = await invoke<string[]>("export_csv", {
+        result,
+        chatInfo,
+        path,
+        options: {
+          min_messages: minMessages,
+          min_reactions: minReactions,
+          min_poll_participations: minPollParticipations,
+          include_reactions: includeReactions,
+          excluded_ids: Array.from(excludedMembers.keys()),
+          st_ids: Array.from(stMembers.keys()),
+        },
+      });
+      setExportStatus({ ok: true, text: t("export.done", { count: written.length }) });
+    } catch (e) {
+      setExportStatus({ ok: false, text: `${t("export.failed")}: ${String(e)}` });
     }
   }
 
@@ -316,9 +322,26 @@ export default function MainView({
 
       {/* Statistik (2 Spalten) */}
       <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-2">
-        <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-          {t("stats.label")}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
+            {t("stats.label")}
+          </p>
+          <div className="flex items-center gap-3">
+            {exportStatus && (
+              <span className={`text-xs ${exportStatus.ok ? "text-green-400" : "text-[#e05555]"}`}>
+                {exportStatus.text}
+              </span>
+            )}
+            <button
+              onClick={handleExport}
+              disabled={!result || analyzing}
+              title={!result ? t("stats.no_analysis") : undefined}
+              className="bg-[#7c6af7] hover:bg-[#6a58e0] text-white text-sm font-semibold py-1.5 px-4 rounded-lg shadow transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {t("export.button")}
+            </button>
+          </div>
+        </div>
         {result ? (
           <>
             <div className="flex gap-0">
@@ -522,12 +545,6 @@ export default function MainView({
               </div>
             )}
 
-            <button
-              onClick={handleExport}
-              className="mt-2 bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
-            >
-              {t("stats.export_csv")}
-            </button>
           </>
         ) : (
           <p className="text-[#3a3a5a] text-sm">{t("stats.no_analysis")}</p>

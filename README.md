@@ -215,7 +215,7 @@ Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeins
 | **Analyse starten** | Scannt alle Nachrichten im Zeitraum |
 | **Schwellenwert** | Mindestnachrichten- und Reaktionszahl für „aktiv" festlegen |
 | **Ausschließen** | Zeile anklicken, um Mitglied manuell aus der Zählung zu nehmen |
-| **Exportieren** | Ergebnis als CSV-Datei speichern |
+| **Exportieren** | Button oben rechts in der Statistik: Zusammenfassung und alle Einzeldaten als CSV speichern |
 
 #### Spalten in der Ergebnistabelle
 
@@ -227,14 +227,32 @@ Die Chat-URL-Eingabe ist **immer oben sichtbar** und wird von allen Tabs gemeins
 
 #### CSV-Export
 
-Dateiname: `<Chat>_<Zeitraum>_<Exportdatum>.csv`, z. B. `QSI_Germany_Chat_letzte_3_Monate_2026-10-12.csv`.
+Button **⤓ Exportieren** oben rechts in der Statistik-Karte. Es werden immer zwei Dateien geschrieben:
 
-Der Export enthält einen Metadaten-Header (Kommentarzeilen mit `#`) mit Chat-Angaben, **allen verwendeten Filteroptionen** (Zeitraum, Reaktionen einbezogen, Mindest-Nachrichten, Mindest-Reaktionen, Mindest-Umfrageteilnahmen, Anzahl ausgeschlossener und ST-Mitglieder) und einer Ergebnis-Zusammenfassung. Danach folgt eine Datenzeile pro Mitglied:
+| Datei | Inhalt |
+|---|---|
+| `<Chat>_<von>_bis_<bis>_<Exportdatum>.csv` | Zusammenfassung: eine Zeile pro Mitglied, Summen über den ganzen analysierten Zeitraum |
+| `..._Einzeldaten.csv` | **Alle** Aktivitäten des analysierten Zeitraums, eine Zeile pro Nachricht, Reaktion, Umfrage- oder Quiz-Teilnahme |
+
+Beide Dateien beginnen mit einem Metadaten-Header (Kommentarzeilen mit `#`) mit Chat-Angaben und **allen verwendeten Filteroptionen** (analysierter Zeitraum, Reaktionen einbezogen, Mindest-Nachrichten, Mindest-Reaktionen, Mindest-Umfrageteilnahmen, Anzahl ausgeschlossener und ST-Mitglieder).
+
+Zusammenfassung (alle Mitglieder, keine Zeilen werden weggelassen):
 
 ```
 user_id, name, username, joined_date, first_message_date, last_message_date, message_count,
-last_reaction_date, reaction_count, poll_participations, last_poll_date, is_bot, active, excluded, servant_team
+last_reaction_date, reaction_count, poll_participations, quiz_participations, last_poll_date,
+is_bot, active, excluded, servant_team
 ```
+
+Einzeldaten:
+
+```
+date, time_utc, week, month, user_id, name, username, activity, is_bot, excluded, servant_team
+```
+
+**Zeitraum nachträglich einschränken:** Die Einzeldaten in LibreOffice/Excel öffnen, die Spaltenkopf-Zeile markieren und AutoFilter setzen. Dann nach `date` (von/bis), `week` (z. B. `2026-KW41`) oder `month` (z. B. `2026-10`) filtern. Zahlen pro Mitglied für den gefilterten Zeitraum liefert eine Pivot-Tabelle (Zeilen: `name`, Spalten: `activity`, Werte: Anzahl).
+
+Grösse: ca. 75 Byte pro Zeile, 10.000 Nachrichten ergeben rund 0,7 MB. Zeiten sind UTC. Reaktionen tragen das Datum der Nachricht, auf die reagiert wurde (Telegram liefert keinen Reaktionszeitpunkt). Einzeldaten gibt es nur für Analysen, die mit dieser Version erstellt wurden.
 
 ### Tab „Erste Erwähnung"
 
@@ -289,7 +307,7 @@ Die Suche zeigt Fortschritt im Log-Fenster. Im Chatverlauf werden nicht nur sich
 
 #### CSV-Export (Ein/Austritt)
 
-Nach einer Suche erscheint **↓ CSV exportieren**. Dateiname: `<Chat>_Ein-Austritt_<User>_<von>_bis_<bis>_<Exportdatum>.csv`. Im Header stehen Suchbegriff, ausgewähltes Mitglied, Ereignistypen und Zeitraum der Suche; danach eine Zeile pro Ereignis (`event, date, time_utc, affected_user, affected_user_id, affected_username, actor, actor_user_id, chat_id, message_id`).
+Nach einer Suche erscheint oben rechts in der Ergebnis-Karte **⤓ Exportieren**. Dateiname: `<Chat>_Ein-Austritt_<User>_<von>_bis_<bis>_<Exportdatum>.csv`. Im Header stehen Suchbegriff, ausgewähltes Mitglied, Ereignistypen und Zeitraum der Suche; danach eine Zeile pro Ereignis (`event, date, time_utc, affected_user, affected_user_id, affected_username, actor, actor_user_id, chat_id, message_id`).
 
 ---
 
