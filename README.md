@@ -177,9 +177,9 @@ rm -rf ~/.local/share/tua
 
 ## Erste Verwendung
 
-Voraussetzungen: ein eigenes Telegram-Konto, eigene API-Zugangsdaten (siehe [Telegram API-Zugangsdaten](#telegram-api-zugangsdaten)) und Mitgliedschaft im Chat, der ausgewertet werden soll. Die App liest mit deinem Konto, sie sieht also genau das, was du in Telegram auch siehst. Für Mitgliederliste, Beitrittsdaten und Bot-Erkennung sind in Kanälen und grossen Gruppen Admin-Rechte nötig. Die Statistik zeigt unter **Eigene Rechte**, ob das der Fall ist.
+Voraussetzungen: ein eigenes Telegram-Konto, eigene API-Zugangsdaten (siehe [Telegram API-Zugangsdaten](#telegram-api-zugangsdaten)) und Mitgliedschaft im Chat, der ausgewertet werden soll. Die App liest mit deinem Konto, sie sieht also genau das, was du in Telegram auch siehst. Für Mitgliederliste, Beitrittsdaten und Bot-Erkennung sind in Kanälen und grossen Gruppen Admin-Rechte nötig. Die Statistik zeigt unter **Eigene Rechte**, ob das der Fall ist. Ohne Admin-Rechte funktioniert die App trotzdem: Nachrichten, Reaktionen und Umfragen werden vollständig ausgewertet, nur Beitrittsdaten, Mitgliederzahl, Bot-Erkennung und die Namensvorschläge in den Suchfeldern können fehlen. Die App weist an den betroffenen Stellen darauf hin.
 
-1. App starten. Beim allerersten Start `api_id` und `api_hash` eingeben.
+1. App starten. Beim allerersten Start `api_id` und `api_hash` eingeben. Der Dialog enthält eine Schritt-für-Schritt-Anleitung, wie man sie auf my.telegram.org anlegt.
 2. Telefonnummer (mit Ländervorwahl, z. B. `+41791234567`) eingeben und **Verbinden** klicken.
 3. Den von Telegram per SMS / Telegram-App zugesandten Code eingeben.
 4. Bei Zwei-Faktor-Authentifizierung zusätzlich das Cloud-Passwort eingeben.

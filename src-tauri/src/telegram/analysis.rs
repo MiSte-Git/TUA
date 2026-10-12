@@ -156,28 +156,29 @@ fn parse_chat_identifier(url: &str) -> Result<ChatIdentifier, AnalysisError> {
 
 // ── Peer helpers ──────────────────────────────────────────────────────────────
 
-fn chat_info_from_peer(peer: &grammers_client::peer::Peer) -> ChatInfo {
+fn chat_info_from_peer(peer: &grammers_client::peer::Peer) -> Result<ChatInfo, AnalysisError> {
     use grammers_client::peer::Peer;
-    match peer {
+    let invalid = || AnalysisError::Telegram("Ungültige Chat-ID vom Server erhalten".into());
+    Ok(match peer {
         Peer::Channel(channel) => ChatInfo {
-            id: channel.id().bare_id().expect("invalid peer id"),
+            id: channel.id().bare_id().ok_or_else(invalid)?,
             title: channel.title().to_string(),
             username: channel.username().map(str::to_string),
             member_count: channel.raw.participants_count,
         },
         Peer::Group(group) => ChatInfo {
-            id: group.id().bare_id().expect("invalid peer id"),
+            id: group.id().bare_id().ok_or_else(invalid)?,
             title: group.title().unwrap_or("Unknown").to_string(),
             username: group.username().map(str::to_string),
             member_count: None,
         },
         Peer::User(user) => ChatInfo {
-            id: user.id().bare_id().expect("invalid peer id"),
+            id: user.id().bare_id().ok_or_else(invalid)?,
             title: user.full_name(),
             username: user.username().map(str::to_string),
             member_count: None,
         },
-    }
+    })
 }
 
 /// Fetch participants_count from GetFullChannel when it is absent in the basic Channel object.
@@ -216,7 +217,7 @@ pub async fn resolve_chat(chat_url: &str) -> Result<ChatInfo, AnalysisError> {
             .ok_or_else(|| AnalysisError::ChatNotFound(name))?,
         ChatIdentifier::ChannelId(id) => {
             let peer_ref = PeerRef {
-                id: PeerId::channel(id).expect("invalid channel id"),
+                id: PeerId::channel(id).ok_or_else(|| AnalysisError::InvalidUrl(format!("Ungültige Kanal-ID: {}", id)))?,
                 auth: PeerAuth::default(),
             };
             client
@@ -226,7 +227,7 @@ pub async fn resolve_chat(chat_url: &str) -> Result<ChatInfo, AnalysisError> {
         }
     };
 
-    let mut info = chat_info_from_peer(&peer);
+    let mut info = chat_info_from_peer(&peer)?;
     if info.member_count.is_none() {
         info.member_count = fetch_participants_count(&client, &peer).await;
     }
@@ -268,7 +269,7 @@ pub async fn run_analysis(
         ChatIdentifier::ChannelId(id) => {
             let _ = app.emit("log", format!("Kanal {} wird aufgelöst…", id));
             let peer_ref = PeerRef {
-                id: PeerId::channel(id).expect("invalid channel id"),
+                id: PeerId::channel(id).ok_or_else(|| AnalysisError::InvalidUrl(format!("Ungültige Kanal-ID: {}", id)))?,
                 auth: PeerAuth::default(),
             };
             let peer = client
@@ -279,7 +280,7 @@ pub async fn run_analysis(
         }
     };
 
-    let mut chat_info = chat_info_from_peer(&peer);
+    let mut chat_info = chat_info_from_peer(&peer)?;
     if chat_info.member_count.is_none() {
         chat_info.member_count = fetch_participants_count(&client, &peer).await;
     }
@@ -498,7 +499,7 @@ async fn scan_window(
                 if let Some(sender_id) = msg.sender_id() {
                     // Only count actual user messages, not channel-signed posts
                     if matches!(sender_id.kind(), PeerKind::User) {
-                        let uid = sender_id.bare_id().expect("sender without id");
+                        let Some(uid) = sender_id.bare_id() else { continue };
                         let name = msg
                             .sender()
                             .and_then(|p| p.name())

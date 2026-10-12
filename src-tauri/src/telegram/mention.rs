@@ -152,7 +152,7 @@ pub async fn find_first_mention(
 
     // Resolve chat peer
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id).expect("invalid channel id"),
+        id: PeerId::channel(chat_id).ok_or_else(|| format!("Ungültige Chat-ID: {}", chat_id))?,
         auth: PeerAuth::default(),
     };
     let peer = client
@@ -303,7 +303,7 @@ pub async fn find_join_leave_events(
     }
 
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id).expect("invalid channel id"),
+        id: PeerId::channel(chat_id).ok_or_else(|| format!("Ungültige Chat-ID: {}", chat_id))?,
         auth: PeerAuth::default(),
     };
     let peer = client
@@ -1198,7 +1198,7 @@ async fn resolve_input_channel(
     chat_id: i64,
 ) -> Result<tl::enums::InputChannel, String> {
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id).expect("invalid channel id"),
+        id: PeerId::channel(chat_id).ok_or_else(|| format!("Ungültige Chat-ID: {}", chat_id))?,
         auth: PeerAuth::default(),
     };
     let peer = client

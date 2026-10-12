@@ -136,7 +136,11 @@ export default function LoginFlow({ onSuccess }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="bg-[#2a2a3e] rounded-xl p-8 w-full max-w-sm shadow-xl">
+    <div
+      className={`bg-[#2a2a3e] rounded-xl p-8 w-full shadow-xl ${
+        step === "credentials" ? "max-w-xl" : "max-w-sm"
+      }`}
+    >
       {/* Logo / Title */}
       <h1 className="text-2xl font-bold text-[#7c6af7] mb-1">
         Telegram User Activities
@@ -155,6 +159,7 @@ export default function LoginFlow({ onSuccess }: Props) {
       {/* Credentials step */}
       {step === "credentials" && (
         <div className="flex flex-col gap-4">
+          <CredentialsGuide />
           {/* API ID */}
           <div className="flex flex-col gap-1">
             <label className="text-[#e0e0f0] text-sm font-medium">API ID</label>
@@ -360,5 +365,84 @@ export default function LoginFlow({ onSuccess }: Props) {
         </p>
       )}
     </div>
+  );
+}
+
+/** Step-by-step guide for first-time users to obtain api_id / api_hash. */
+function CredentialsGuide() {
+  const stepClass = "flex gap-3";
+  const num =
+    "shrink-0 w-5 h-5 rounded-full bg-[#7c6af7] text-white text-[11px] font-bold flex items-center justify-center mt-0.5";
+  return (
+    <details open className="bg-[#1e1e2e] border border-[#3a3a5a] rounded-lg p-4 text-sm text-[#c8c8e0]">
+      <summary className="cursor-pointer font-semibold text-[#e0e0f0] select-none">
+        So bekommst du die Zugangsdaten (einmalig, ca. 3 Minuten)
+      </summary>
+      <p className="text-[#888aaa] text-xs mt-2">
+        Die App liest Telegram mit deinem eigenen Konto. Dafür verlangt Telegram eigene
+        Zugangsdaten, die du kostenlos selbst anlegst.
+      </p>
+      <ol className="flex flex-col gap-2.5 mt-3">
+        <li className={stepClass}>
+          <span className={num}>1</span>
+          <span>
+            Öffne{" "}
+            <button
+              type="button"
+              onClick={() => open("https://my.telegram.org")}
+              className="text-[#7c6af7] underline hover:text-[#a090ff]"
+            >
+              my.telegram.org
+            </button>{" "}
+            im Browser.
+          </span>
+        </li>
+        <li className={stepClass}>
+          <span className={num}>2</span>
+          <span>
+            Gib deine Telefonnummer mit Ländervorwahl ein, z. B. <code>+41791234567</code>, und
+            klicke <b>Next</b>.
+          </span>
+        </li>
+        <li className={stepClass}>
+          <span className={num}>3</span>
+          <span>
+            Telegram schickt dir einen Code <b>in die Telegram-App</b> (Chat „Telegram“, nicht per
+            SMS). Code eingeben und <b>Sign In</b> klicken.
+          </span>
+        </li>
+        <li className={stepClass}>
+          <span className={num}>4</span>
+          <span>
+            Klicke auf <b>API development tools</b>.
+          </span>
+        </li>
+        <li className={stepClass}>
+          <span className={num}>5</span>
+          <span>
+            Formular ausfüllen: <b>App title</b> z. B. <code>TUA</code>, <b>Short name</b> z. B.{" "}
+            <code>tua2026</code> (nur Buchstaben und Zahlen, mind. 5 Zeichen), <b>URL</b> leer
+            lassen, <b>Platform</b> <i>Desktop</i>. Dann <b>Create application</b>.
+          </span>
+        </li>
+        <li className={stepClass}>
+          <span className={num}>6</span>
+          <span>
+            Kopiere <b>App api_id</b> (eine Zahl) und <b>App api_hash</b> (32 Zeichen) in die
+            Felder unten.
+          </span>
+        </li>
+      </ol>
+      <div className="mt-3 pt-3 border-t border-[#3a3a5a] text-xs text-[#888aaa] flex flex-col gap-1">
+        <p>
+          🔒 Die Zugangsdaten gehören zu deinem Telegram-Konto. Nicht weitergeben. Die App speichert
+          sie nur lokal auf diesem Rechner.
+        </p>
+        <p>
+          ⚠ Zeigt my.telegram.org beim Erstellen nur „ERROR“: anderen Short name wählen, VPN oder
+          Werbeblocker ausschalten oder einen anderen Browser versuchen.
+        </p>
+      </div>
+    </details>
   );
 }

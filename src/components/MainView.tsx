@@ -574,6 +574,12 @@ export default function MainView({
               </div>
             </div>
 
+            {!result.own_is_admin && (
+              <p className="text-amber-400 text-xs border-t border-[#3a3a5a] pt-2 mt-1">
+                {t("stats.no_admin_hint")}
+              </p>
+            )}
+
             {/* ST-Statistik */}
             {stMembers.size > 0 && (
               <div className="border-t border-[#3a3a5a] pt-2 mt-1">

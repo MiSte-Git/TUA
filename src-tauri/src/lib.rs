@@ -329,6 +329,23 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // Safety net: report unexpected internal errors in the log window
+            // instead of failing silently.
+            {
+                use tauri::Emitter;
+                let handle = app.handle().clone();
+                let default_hook = std::panic::take_hook();
+                std::panic::set_hook(Box::new(move |info| {
+                    let _ = handle.emit(
+                        "log",
+                        format!(
+                            "Interner Fehler: {}. Bitte den Vorgang mit Stopp abbrechen und erneut versuchen.",
+                            info
+                        ),
+                    );
+                    default_hook(info);
+                }));
+            }
             #[cfg(desktop)]
             {
                 app.handle()

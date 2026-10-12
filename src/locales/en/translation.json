@@ -57,7 +57,8 @@
     "st_truly_active": "thereof truly active",
     "st_messages_total": "Messages total",
     "st_messages_active": "Messages ≥ {{count}}",
-    "st_polls": "Poll participations ST"
+    "st_polls": "Poll participations ST",
+    "no_admin_hint": "No admin rights in this chat: messages, reactions and polls are analysed completely. Join dates, total member count and bot detection may be missing or incomplete."
   },
   "tooltips": {
     "written": "Total number of current members who wrote at least one message in the period (including manually excluded).",

@@ -91,6 +91,7 @@ export function JoinLeaveView({
   const [cancelled, setCancelled] = useState(false);
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [membersUnavailable, setMembersUnavailable] = useState(false);
   const [membersCount, setMembersCount] = useState(0);
   const [selectedMember, setSelectedMember] = useState<ChatMember | null>(null);
   const [focused, setFocused] = useState(false);
@@ -135,9 +136,13 @@ export function JoinLeaveView({
     setMembers([]);
     setMembersCount(0);
     setMembersLoading(true);
+    setMembersUnavailable(false);
     invoke<ChatMember[]>("load_chat_members", { chatId })
       .then(setMembers)
-      .catch((e) => console.error("Mitglieder laden fehlgeschlagen:", e))
+      .catch((e) => {
+        console.error("Mitglieder laden fehlgeschlagen:", e);
+        setMembersUnavailable(true);
+      })
       .finally(() => setMembersLoading(false));
   }, [chatId]);
 
@@ -333,6 +338,13 @@ export function JoinLeaveView({
         {membersLoading && (
           <p className="text-[#888aaa] text-xs animate-pulse">
             Mitglieder werden geladen… {membersCount}
+          </p>
+        )}
+
+        {membersUnavailable && !membersLoading && (
+          <p className="text-amber-400 text-xs">
+            Mitgliederliste nicht verfügbar (dafür sind in diesem Chat Admin-Rechte nötig).
+            Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
           </p>
         )}
 
@@ -554,6 +566,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
 
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [membersUnavailable, setMembersUnavailable] = useState(false);
   const [membersCount, setMembersCount] = useState(0);
 
   // Member selected from autocomplete (drives member card)
@@ -621,9 +634,13 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
     setMembers([]);
     setMembersCount(0);
     setMembersLoading(true);
+    setMembersUnavailable(false);
     invoke<ChatMember[]>("load_chat_members", { chatId })
       .then(setMembers)
-      .catch((e) => console.error("Mitglieder laden fehlgeschlagen:", e))
+      .catch((e) => {
+        console.error("Mitglieder laden fehlgeschlagen:", e);
+        setMembersUnavailable(true);
+      })
       .finally(() => setMembersLoading(false));
   }, [chatId]);
 
@@ -771,6 +788,13 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
         {membersLoading && (
           <p className="text-[#888aaa] text-xs animate-pulse">
             {t("first_mention.members_loading", { count: membersCount })}
+          </p>
+        )}
+
+        {membersUnavailable && !membersLoading && (
+          <p className="text-amber-400 text-xs">
+            Mitgliederliste nicht verfügbar (dafür sind in diesem Chat Admin-Rechte nötig).
+            Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
           </p>
         )}
 

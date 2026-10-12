@@ -57,7 +57,8 @@
     "st_truly_active": "davon wirklich aktiv",
     "st_messages_total": "Nachrichten gesamt",
     "st_messages_active": "Nachrichten ≥ {{count}}",
-    "st_polls": "Umfragen-Teilnahme ST"
+    "st_polls": "Umfragen-Teilnahme ST",
+    "no_admin_hint": "Ohne Admin-Rechte in diesem Chat: Nachrichten, Reaktionen und Umfragen werden vollständig ausgewertet. Beitrittsdaten, Gesamtmitgliederzahl und Bot-Erkennung können fehlen oder unvollständig sein."
   },
   "tooltips": {
     "written": "Anzahl aller aktuellen Mitglieder, die im Zeitraum mindestens eine Nachricht geschrieben haben (inkl. manuell Ausgeschlossener).",
