@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { AnalysisResult, MemberActivity, UserOnlineStatus } from "../types";
@@ -42,7 +42,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return <span className="text-[#7c6af7] ml-1">{dir === "asc" ? "↑" : "↓"}</span>;
 }
 
-export default function ResultsTable({
+function ResultsTable({
   result,
   includeReactions,
   minMessages,
@@ -142,10 +142,10 @@ export default function ResultsTable({
   });
 
   const query = nameFilter.trim().toLowerCase();
-  const visible = sorted
-    .filter(
-      (m) => m.message_count > 0 || m.poll_participations > 0 || m.reaction_count > 0
-    )
+  const withActivity = sorted.filter(
+    (m) => m.message_count > 0 || m.poll_participations > 0 || m.reaction_count > 0
+  );
+  const visible = withActivity
     .filter(
       (m) =>
         query === "" ||
@@ -155,7 +155,16 @@ export default function ResultsTable({
   const activeMembers   = visible.filter((m) => !excludedMembers.has(m.user_id));
   const disabledMembers = visible.filter((m) =>  excludedMembers.has(m.user_id));
   const displayMembers  = [...activeMembers, ...disabledMembers];
-  const belowCount = activeMembers.filter((m) => !isActive(m)).length;
+
+  // Legend counts: independent of the name search, same rules as the statistics
+  const included = withActivity.filter((m) => !excludedMembers.has(m.user_id));
+  const legendActive = included.filter((m) => isActive(m)).length;
+  const legendBelowWithMsgs = included.filter(
+    (m) => !isActive(m) && m.message_count > 0
+  ).length;
+  const legendNoMsgs = included.filter((m) => m.message_count === 0).length;
+  const legendBelow = legendBelowWithMsgs + legendNoMsgs;
+  const legendExcluded = withActivity.length - included.length;
 
   const hasPollVotes = result.members.some((m) => m.poll_participations > 0);
   const hasQuizVotes = result.members.some((m) => m.quiz_participations > 0);
@@ -181,16 +190,36 @@ export default function ResultsTable({
           </span>
         )}
         <div className="ml-auto flex items-center gap-4 text-xs whitespace-nowrap">
-          {belowCount > 0 && (
-            <span className="flex items-center gap-1.5 text-amber-400">
+          <span className="flex items-center gap-1.5 text-[#7c6af7]">
+            <span className="inline-block w-1 h-4 rounded-sm bg-[#7c6af7]" />
+            {t("table.legend_active", { count: minMessages, n: legendActive })}
+          </span>
+          {legendBelow > 0 && (
+            <span
+              className="flex items-center gap-1.5 text-amber-400"
+              title={t("table.legend_below_tooltip", {
+                count: minMessages,
+                withMsgs: legendBelowWithMsgs,
+                noMsgs: legendNoMsgs,
+              })}
+            >
               <span className="inline-block w-1 h-4 rounded-sm bg-amber-500" />
-              {t("table.legend_below", { count: minMessages, n: belowCount })}
+              {t("table.legend_below", { n: legendBelow })}
+              {legendNoMsgs > 0 && (
+                <span className="text-[#888aaa]">
+                  {t("table.legend_below_split", {
+                    count: minMessages,
+                    withMsgs: legendBelowWithMsgs,
+                    noMsgs: legendNoMsgs,
+                  })}
+                </span>
+              )}
             </span>
           )}
-          {disabledMembers.length > 0 && (
+          {legendExcluded > 0 && (
             <span className="flex items-center gap-1.5 text-[#e05555]">
               <span className="inline-block w-1 h-4 rounded-sm bg-[#e05555]" />
-              {t("table.legend_excluded", { n: disabledMembers.length })}
+              {t("table.legend_excluded", { n: legendExcluded })}
             </span>
           )}
         </div>
@@ -422,3 +451,5 @@ export default function ResultsTable({
     </div>
   );
 }
+
+export default memo(ResultsTable);

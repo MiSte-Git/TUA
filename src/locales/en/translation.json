@@ -110,8 +110,11 @@
     "online_status_unknown": "unknown (private)",
     "below_badge": "not counted",
     "below_tooltip": "Not counted as active: fewer than {{count}} messages.",
-    "legend_below": "Not active (< {{count}} messages): {{n}}",
-    "legend_excluded": "Excluded: {{n}}"
+    "legend_below": "Not active: {{n}}",
+    "legend_excluded": "Excluded: {{n}}",
+    "legend_active": "Active (≥ {{count}} messages): {{n}}",
+    "legend_below_split": "({{withMsgs}} with < {{count}} msgs, {{noMsgs}} polls/reactions only)",
+    "legend_below_tooltip": "{{withMsgs}} members with fewer than {{count}} messages and {{noMsgs}} members without messages who only voted in polls or reacted. Neither counts as truly active."
   },
   "bots": {
     "none_found": "No bots found in channel",

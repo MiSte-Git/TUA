@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
@@ -112,6 +112,9 @@ export default function MainView({
   const [excludedMembers, setExcludedMembers] = useState<Map<number, string>>(new Map());
   const [stMembers, setStMembers] = useState<Map<number, string>>(new Map());
   const [analyzing, setAnalyzing] = useState(false);
+  // Deferred copies for the (large) results table, so the inputs stay responsive
+  const deferredMinMessages = useDeferredValue(minMessages);
+  const deferredMinPoll = useDeferredValue(minPollParticipations);
   const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const cancelledRef = useRef(false);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
@@ -165,7 +168,7 @@ export default function MainView({
     setStMembers(loadST(chatInfo.id));
   }, [chatInfo?.id]);
 
-  function handleToggleExcluded(userId: number, name: string) {
+  const handleToggleExcluded = useCallback((userId: number, name: string) => {
     setExcludedMembers((prev) => {
       const next = new Map(prev);
       if (next.has(userId)) {
@@ -176,9 +179,9 @@ export default function MainView({
       if (chatInfo) saveExcluded(chatInfo.id, next);
       return next;
     });
-  }
+  }, [chatInfo]);
 
-  function handleToggleST(userId: number, name: string) {
+  const handleToggleST = useCallback((userId: number, name: string) => {
     setStMembers((prev) => {
       const next = new Map(prev);
       if (next.has(userId)) {
@@ -189,7 +192,7 @@ export default function MainView({
       if (chatInfo) saveST(chatInfo.id, next);
       return next;
     });
-  }
+  }, [chatInfo]);
 
   async function handleStart(forceFull = false) {
     cancelledRef.current = false;
@@ -646,8 +649,8 @@ export default function MainView({
       <ResultsTable
         result={result}
         includeReactions={includeReactions}
-        minMessages={minMessages}
-        minPollParticipations={minPollParticipations}
+        minMessages={deferredMinMessages}
+        minPollParticipations={deferredMinPoll}
         excludedMembers={excludedMembers}
         onToggleExcluded={handleToggleExcluded}
         notABot={notABot}

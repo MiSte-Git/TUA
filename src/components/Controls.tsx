@@ -42,8 +42,64 @@ function Toggle({
   );
 }
 
-const numInputClass =
-  "bg-[#1e1e2e] border border-[#3a3a5a] focus:border-[#7c6af7] outline-none px-2 py-1 rounded text-[#e0e0f0] text-sm w-16 text-right disabled:opacity-50";
+/**
+ * Number field with explicit -/+ buttons. Replaces the native number spinner,
+ * whose auto-repeat counted twice per click when re-rendering was slow.
+ */
+function NumberStepper({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  disabled: boolean;
+}) {
+  const btn =
+    "w-7 h-7 flex items-center justify-center text-[#e0e0f0] bg-[#1e1e2e] hover:bg-[#3a3a5e] disabled:opacity-50 disabled:cursor-not-allowed select-none transition-colors";
+  return (
+    <div className="flex items-stretch border border-[#3a3a5a] rounded overflow-hidden focus-within:border-[#7c6af7]">
+      <button
+        type="button"
+        className={btn}
+        onClick={() => onChange(Math.max(0, value - 1))}
+        disabled={disabled || value <= 0}
+        aria-label="-1"
+      >
+        −
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, "");
+          onChange(digits === "" ? 0 : Math.max(0, parseInt(digits, 10)));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            onChange(value + 1);
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            onChange(Math.max(0, value - 1));
+          }
+        }}
+        disabled={disabled}
+        className="bg-[#1e1e2e] outline-none px-1 text-[#e0e0f0] text-sm w-12 text-center tabular-nums border-x border-[#3a3a5a] disabled:opacity-50"
+      />
+      <button
+        type="button"
+        className={btn}
+        onClick={() => onChange(value + 1)}
+        disabled={disabled}
+        aria-label="+1"
+      >
+        +
+      </button>
+    </div>
+  );
+}
 
 export default function Controls({
   chatInfo,
@@ -83,42 +139,15 @@ export default function Controls({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
           <span className="text-[#888aaa] text-sm">{t("controls.min_messages")}</span>
-          <input
-            type="number"
-            min={0}
-            value={minMessages}
-            onChange={(e) =>
-              onChangeMinMessages(Math.max(0, parseInt(e.target.value, 10) || 0))
-            }
-            disabled={analyzing}
-            className={numInputClass}
-          />
+          <NumberStepper value={minMessages} onChange={onChangeMinMessages} disabled={analyzing} />
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-[#888aaa] text-sm">{t("controls.min_reactions")}</span>
-          <input
-            type="number"
-            min={0}
-            value={minReactions}
-            onChange={(e) =>
-              onChangeMinReactions(Math.max(0, parseInt(e.target.value, 10) || 0))
-            }
-            disabled={analyzing}
-            className={numInputClass}
-          />
+          <NumberStepper value={minReactions} onChange={onChangeMinReactions} disabled={analyzing} />
         </div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-[#888aaa] text-sm">{t("controls.min_poll_participations")}</span>
-          <input
-            type="number"
-            min={0}
-            value={minPollParticipations}
-            onChange={(e) =>
-              onChangeMinPollParticipations(Math.max(0, parseInt(e.target.value, 10) || 0))
-            }
-            disabled={analyzing}
-            className={numInputClass}
-          />
+          <NumberStepper value={minPollParticipations} onChange={onChangeMinPollParticipations} disabled={analyzing} />
         </div>
         <p className="text-[#3a3a5a] text-xs">{t("controls.threshold_hint")}</p>
       </div>

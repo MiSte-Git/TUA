@@ -110,8 +110,11 @@
     "online_status_unknown": "unbekannt (privat)",
     "below_badge": "zählt nicht",
     "below_tooltip": "Zählt nicht als aktiv: weniger als {{count}} Nachrichten.",
-    "legend_below": "Nicht aktiv (< {{count}} Nachrichten): {{n}}",
-    "legend_excluded": "Ausgeschlossen: {{n}}"
+    "legend_below": "Nicht aktiv: {{n}}",
+    "legend_excluded": "Ausgeschlossen: {{n}}",
+    "legend_active": "Aktiv (≥ {{count}} Nachrichten): {{n}}",
+    "legend_below_split": "({{withMsgs}} mit < {{count}} Nachr., {{noMsgs}} nur Umfragen/Reaktionen)",
+    "legend_below_tooltip": "{{withMsgs}} Mitglieder mit weniger als {{count}} Nachrichten und {{noMsgs}} Mitglieder ohne Nachrichten, die nur an Umfragen teilgenommen oder reagiert haben. Beide zählen nicht zu Wirklich aktiv."
   },
   "bots": {
     "none_found": "Keine Bots im Kanal gefunden",
