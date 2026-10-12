@@ -30,10 +30,50 @@ Telegram (kostenlos, jede/r mit Telegram-Konto kann sie anlegen):
    Kurzname sind frei wählbar, z. B. "TUA").
 3. `api_id` (Zahl) und `api_hash` (Zeichenkette) notieren.
 
-Die App fragt beim ersten Start selbst danach (mit direktem Link zu
-my.telegram.org) und speichert die Eingabe lokal – ein Aufschreiben ist nur
-zur Sicherheit sinnvoll, falls die Konfiguration später mal neu eingegeben
-werden muss.
+Die App fragt beim ersten Start selbst danach (mit Schritt-für-Schritt-Anleitung
+und direktem Link zu my.telegram.org) und speichert die Eingabe lokal – ein
+Aufschreiben ist nur zur Sicherheit sinnvoll, falls die Konfiguration später
+mal neu eingegeben werden muss.
+
+### Warum jede/r eigene Zugangsdaten braucht
+
+**Wofür die Daten da sind:** Die App meldet sich wie ein eigener Telegram-Client mit dem
+Konto der Nutzerin bzw. des Nutzers an. Nur so kann sie den Chatverlauf, Reaktionen und
+Umfragestimmen rückwirkend lesen. Telegram verlangt von jedem solchen Client eine
+`api_id` und einen `api_hash`. Diese kennzeichnen **die App**, nicht eine Entwicklerin oder
+einen Entwickler. Trotz des Namens „API development tools“ muss man nichts programmieren,
+um sie anzulegen.
+
+**Warum kein Bot?** Bots sehen keinen alten Verlauf, nur Nachrichten ab dem Zeitpunkt,
+an dem sie im Chat sind, und auch das nur mit passenden Rechten. Für eine Auswertung
+vergangener Monate reicht das nicht.
+
+**Alternative: Zugangsdaten fest einbauen.** Technisch könnten Zugangsdaten beim Bauen
+fest in die App eingebaut werden (so machen es viele Telegram-Apps). Dann entfiele der
+Schritt auf my.telegram.org für alle Nutzer. Das wurde bewusst **nicht** gemacht, weil
+dann alle Installationen dieselbe `api_id` teilen:
+
+| Möglicher Fall | Wen es trifft | Folge |
+|---|---|---|
+| Wartezeit wegen zu vieler Abfragen (`FLOOD_WAIT`) | nur das Konto, das gerade abfragt | Sekunden bis Stunden warten, geht von selbst weg. Tritt unabhängig davon auf, wessen Zugangsdaten verwendet werden. |
+| Sperre der `api_id` (z. B. `API_ID_INVALID`, `API_ID_PUBLISHED_FLOOD`) | **alle** Installationen mit dieser `api_id`, auch andere Apps mit denselben Daten | Niemand kann sich mehr anmelden, bis neue Zugangsdaten eingebaut und verteilt sind. Die Konten der Nutzer selbst bleiben intakt. |
+| Einschränkung des Inhaber-Kontos bei schwerem Missbrauch | die Person, deren Telefonnummer die `api_id` gehört | sehr selten, aber der eigentliche Worst Case, weil ein persönliches Konto betroffen wäre |
+
+Eine `api_id` hängt an der Telefonnummer, mit der sie angelegt wurde (pro Nummer ist
+nur eine Applikation möglich). Mit eigenen Zugangsdaten pro Person kann das Verhalten
+anderer Nutzer das eigene Konto nicht beeinträchtigen. Das ist der Grund für die
+aktuelle Lösung.
+
+Falls künftig doch eingebaute Zugangsdaten gewünscht sind, sollten sie das Risiko so
+begrenzen:
+
+- `api_id` mit einem **Zweitkonto** (eigene Telefonnummer) anlegen, nicht mit dem persönlichen Hauptkonto.
+- Diese `api_id` **nur für diese App** verwenden.
+- Die Option „eigene Zugangsdaten verwenden“ in der App behalten, damit Nutzer bei einer Sperre ausweichen können.
+- Den `api_hash` nur über GitHub-Secrets beim Bauen einspielen, nie ins Repository einchecken. (Aus einer verteilten App lässt er sich trotzdem auslesen; das gilt für alle Telegram-Apps.)
+
+Ob ein solches Vorgehen im konkreten Fall zulässig ist, regeln die
+[Telegram API Terms of Service](https://core.telegram.org/api/terms).
 
 ## Für alle anderen (fertiger Installer)
 
