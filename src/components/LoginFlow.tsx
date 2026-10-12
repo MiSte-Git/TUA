@@ -382,6 +382,28 @@ function CredentialsGuide() {
         Die App liest Telegram mit deinem eigenen Konto. Dafür verlangt Telegram eigene
         Zugangsdaten, die du kostenlos selbst anlegst.
       </p>
+      <details className="mt-2 text-xs text-[#888aaa]">
+        <summary className="cursor-pointer text-[#7c6af7] hover:text-[#a090ff] select-none">
+          Warum brauche ich das?
+        </summary>
+        <ul className="mt-2 flex flex-col gap-1.5 list-disc pl-4">
+          <li>
+            Telegram verlangt für jedes Programm, das sich mit einem Konto anmeldet, eine{" "}
+            <code>api_id</code> und einen <code>api_hash</code>. Sie kennzeichnen die App, nicht dich
+            als Entwickler. Trotz des Namens „API development tools“ musst du nichts programmieren.
+          </li>
+          <li>
+            Ein Bot reicht nicht: Bots sehen keinen alten Chatverlauf und könnten vergangene Monate
+            nicht auswerten.
+          </li>
+          <li>
+            Eigene Zugangsdaten schützen dich: Würden alle Nutzer dieselben Daten teilen, könnte ein
+            Problem bei einer anderen Person die App für alle sperren. Mit deinen eigenen Daten hängt
+            nichts vom Verhalten anderer ab.
+          </li>
+          <li>Das Anlegen ist kostenlos und nur einmal nötig.</li>
+        </ul>
+      </details>
       <ol className="flex flex-col gap-2.5 mt-3">
         <li className={stepClass}>
           <span className={num}>1</span>
