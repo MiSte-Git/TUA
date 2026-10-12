@@ -106,7 +106,11 @@
     "online_status_recently": "kürzlich online",
     "online_status_last_week": "letzte Woche online",
     "online_status_last_month": "letzten Monat online",
-    "online_status_unknown": "unbekannt (privat)"
+    "online_status_unknown": "unbekannt (privat)",
+    "below_badge": "zählt nicht",
+    "below_tooltip": "Zählt nicht als aktiv: weniger als {{count}} Nachrichten.",
+    "legend_below": "Nicht aktiv (< {{count}} Nachrichten): {{n}}",
+    "legend_excluded": "Ausgeschlossen: {{n}}"
   },
   "bots": {
     "none_found": "Keine Bots im Kanal gefunden",

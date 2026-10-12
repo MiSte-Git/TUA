@@ -8,7 +8,6 @@ interface Props {
   result: AnalysisResult | null;
   includeReactions: boolean;
   minMessages: number;
-  minReactions: number;
   minPollParticipations: number;
   excludedMembers: Map<number, string>;
   onToggleExcluded: (userId: number, name: string) => void;
@@ -47,7 +46,6 @@ export default function ResultsTable({
   result,
   includeReactions,
   minMessages,
-  minReactions,
   minPollParticipations,
   excludedMembers,
   onToggleExcluded,
@@ -112,9 +110,9 @@ export default function ResultsTable({
     );
   }
 
-  const isActive = (m: MemberActivity) =>
-    m.message_count >= minMessages ||
-    (minReactions > 0 && m.reaction_count >= minReactions);
+  // Same rule as the statistics ("Wirklich aktiv") and the CSV export:
+  // only the message threshold decides whether a member counts as active.
+  const isActive = (m: MemberActivity) => m.message_count >= minMessages;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -157,6 +155,7 @@ export default function ResultsTable({
   const activeMembers   = visible.filter((m) => !excludedMembers.has(m.user_id));
   const disabledMembers = visible.filter((m) =>  excludedMembers.has(m.user_id));
   const displayMembers  = [...activeMembers, ...disabledMembers];
+  const belowCount = activeMembers.filter((m) => !isActive(m)).length;
 
   const hasPollVotes = result.members.some((m) => m.poll_participations > 0);
   const hasQuizVotes = result.members.some((m) => m.quiz_participations > 0);
@@ -181,6 +180,20 @@ export default function ResultsTable({
             {t("table.search_results", { count: displayMembers.length })}
           </span>
         )}
+        <div className="ml-auto flex items-center gap-4 text-xs whitespace-nowrap">
+          {belowCount > 0 && (
+            <span className="flex items-center gap-1.5 text-amber-400">
+              <span className="inline-block w-1 h-4 rounded-sm bg-amber-500" />
+              {t("table.legend_below", { count: minMessages, n: belowCount })}
+            </span>
+          )}
+          {disabledMembers.length > 0 && (
+            <span className="flex items-center gap-1.5 text-[#e05555]">
+              <span className="inline-block w-1 h-4 rounded-sm bg-[#e05555]" />
+              {t("table.legend_excluded", { n: disabledMembers.length })}
+            </span>
+          )}
+        </div>
       </div>
       <div
         className="rounded-xl border border-[#3a3a5a]"
@@ -254,6 +267,7 @@ export default function ResultsTable({
             const excluded = excludedMembers.has(m.user_id);
             const isST = stMembers.has(m.user_id);
             const active = isActive(m);
+            const below = !excluded && !active;
             const baseRow = excluded
               ? "bg-red-900/20 cursor-pointer"
               : isST
@@ -261,21 +275,32 @@ export default function ResultsTable({
               : i % 2 === 0
               ? "bg-[#2a2a3e] cursor-pointer hover:bg-[#333350]"
               : "bg-[#252535] cursor-pointer hover:bg-[#2e2e48]";
-            const textColor = excluded ? "opacity-50" : !active ? "opacity-40" : "";
+            const textColor = excluded ? "opacity-50" : below ? "opacity-60" : "";
+            const marker = excluded
+              ? "border-[#e05555]"
+              : below
+              ? "border-amber-500"
+              : "border-transparent";
 
             return (
               <tr
                 key={m.user_id}
                 className={baseRow}
                 onClick={() => onToggleExcluded(m.user_id, m.name)}
-                title={excluded ? t("table.click_include") : t("table.click_exclude")}
+                title={
+                  excluded
+                    ? t("table.click_include")
+                    : below
+                    ? `${t("table.below_tooltip", { count: minMessages })} ${t("table.click_exclude")}`
+                    : t("table.click_exclude")
+                }
               >
-                <td className={`px-3 py-2 ${textColor}`}>
+                <td className={`px-3 py-2 border-l-4 ${marker}`}>
                   <div className="flex items-center gap-2">
                     {excluded && (
                       <span className="text-[#e05555] text-xs font-bold shrink-0">✕</span>
                     )}
-                    <div>
+                    <div className={textColor}>
                       <p
                         className={`text-[#e0e0f0] leading-tight ${
                           excluded ? "line-through" : ""
@@ -296,13 +321,20 @@ export default function ResultsTable({
                         </p>
                       )}
                     </div>
+                    {below && (
+                      <span className="ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/40 whitespace-nowrap">
+                        {t("table.below_badge")}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className={`px-3 py-2 text-right tabular-nums text-[#888aaa] text-xs ${textColor}`}>
                   {fmtJoinDate(m.joined_date)}
                 </td>
                 <td
-                  className={`px-3 py-2 text-right tabular-nums text-[#e0e0f0] ${textColor}`}
+                  className={`px-3 py-2 text-right tabular-nums ${
+                    below ? "text-amber-400 font-semibold" : `text-[#e0e0f0] ${textColor}`
+                  }`}
                 >
                   {fmt(m.message_count)}
                 </td>

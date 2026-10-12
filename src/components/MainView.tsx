@@ -556,7 +556,6 @@ export default function MainView({
         result={result}
         includeReactions={includeReactions}
         minMessages={minMessages}
-        minReactions={minReactions}
         minPollParticipations={minPollParticipations}
         excludedMembers={excludedMembers}
         onToggleExcluded={handleToggleExcluded}
