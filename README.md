@@ -1,6 +1,6 @@
 # Telegram User Activities
 
-**Aktuelle Version:** 0.4.0
+**Aktuelle Version:** 1.0.0
 
 Desktop-Applikation zur Analyse der Mitgliederaktivität in Telegram-Gruppen und -Kanälen. Zeigt pro Mitglied Nachrichtenanzahl und Reaktionen; ermöglicht zusätzlich die gezielte Suche nach dem frühesten Nachweis eines bestimmten Benutzers sowie nach Ein- und Austrittsereignissen im Chatverlauf.
 
@@ -448,15 +448,17 @@ Listet alle Bots des Chats (unabhängig vom Analysezeitraum). Accounts, die fäl
 
 ## Release-Prozess
 
-Ein Release entsteht aus einem Git-Tag; die Versionsnummer lebt an zwei
-Stellen, `package.json` und `src-tauri/tauri.conf.json`, und muss dort
-identisch sein. Ablauf:
+Ein Release entsteht aus einem Git-Tag. Die Pipeline prüft, dass die
+Versionsnummer in `package.json` und `src-tauri/tauri.conf.json` mit dem Tag
+übereinstimmt. Damit alles konsistent bleibt, wird sie zusätzlich in
+`src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` (Eintrag
+`telegram-user-activities`) und `package-lock.json` gepflegt. Ablauf:
 
 1. Alle Feature-Commits sind auf `main`.
-2. `version` in **beiden** Dateien erhöhen und als eigenen Commit einchecken:
+2. `version` in allen genannten Dateien erhöhen und als eigenen Commit einchecken:
 
    ```bash
-   git add package.json src-tauri/tauri.conf.json
+   git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
    git commit -m "Version X.Y.Z"
    ```
 
