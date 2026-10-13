@@ -24,7 +24,7 @@
     "threshold_hint": "Mitglieder darunter gelten als inaktiv",
     "start": "Analyse starten",
     "analyzing": "Analyse läuft…",
-    "stop": "Stopp"
+    "stop": "Abbrechen"
   },
   "stats": {
     "label": "Statistik",
@@ -128,6 +128,7 @@
   },
   "chat": {
     "connect": "Verbinden",
+    "cancel": "Abbrechen",
     "loading": "Lädt…",
     "member_count": "{{count}} Mitglieder"
   },

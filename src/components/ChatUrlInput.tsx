@@ -62,10 +62,15 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
       onChatResolved(chat, targetUrl);
       setHistory((prev) => saveToHistory({ url: targetUrl, title: chat.title }, prev));
     } catch (e) {
-      setError(String(e));
+      const msg = String(e);
+      if (!msg.includes("Abgebrochen")) setError(msg);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleCancel() {
+    invoke("cancel_resolve_chat").catch(() => {});
   }
 
   function handleFocus() {
@@ -155,6 +160,15 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
         >
           {loading ? t("chat.loading") : t("chat.connect")}
         </button>
+        {loading && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
+          >
+            ✕ {t("chat.cancel")}
+          </button>
+        )}
       </div>
 
       {resolved && (

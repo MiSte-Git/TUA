@@ -171,7 +171,7 @@ export default function Controls({
             onClick={onStop}
             className="bg-[#e05555] hover:bg-[#c94444] text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors"
           >
-            {t("controls.stop")}
+            ✕ {t("controls.stop")}
           </button>
         </div>
       )}

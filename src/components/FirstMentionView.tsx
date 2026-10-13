@@ -92,6 +92,7 @@ export function JoinLeaveView({
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersUnavailable, setMembersUnavailable] = useState(false);
+  const [membersCancelled, setMembersCancelled] = useState(false);
   const [membersCount, setMembersCount] = useState(0);
   const [selectedMember, setSelectedMember] = useState<ChatMember | null>(null);
   const [focused, setFocused] = useState(false);
@@ -133,18 +134,31 @@ export function JoinLeaveView({
   useEffect(() => {
     if (!chatId || chatId === prevChatIdRef.current) return;
     prevChatIdRef.current = chatId;
+    loadMembers(chatId);
+  }, [chatId]);
+
+  function loadMembers(id: number) {
     setMembers([]);
     setMembersCount(0);
     setMembersLoading(true);
     setMembersUnavailable(false);
-    invoke<ChatMember[]>("load_chat_members", { chatId })
+    setMembersCancelled(false);
+    invoke<ChatMember[]>("load_chat_members", { chatId: id })
       .then(setMembers)
       .catch((e) => {
-        console.error("Mitglieder laden fehlgeschlagen:", e);
-        setMembersUnavailable(true);
+        if (String(e).includes("Abgebrochen")) {
+          setMembersCancelled(true);
+        } else {
+          console.error("Mitglieder laden fehlgeschlagen:", e);
+          setMembersUnavailable(true);
+        }
       })
       .finally(() => setMembersLoading(false));
-  }, [chatId]);
+  }
+
+  function handleCancelMembers() {
+    invoke("cancel_load_chat_members").catch(() => {});
+  }
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -336,9 +350,33 @@ export function JoinLeaveView({
         </label>
 
         {membersLoading && (
-          <p className="text-[#888aaa] text-xs animate-pulse">
-            Mitglieder werden geladen… {membersCount}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-[#888aaa] text-xs animate-pulse">
+              Mitglieder werden geladen… {membersCount}
+            </p>
+            <button
+              type="button"
+              onClick={handleCancelMembers}
+              className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-xs font-semibold px-2 py-0.5 rounded transition-colors whitespace-nowrap"
+            >
+              ✕ Abbrechen
+            </button>
+          </div>
+        )}
+
+        {membersCancelled && !membersLoading && (
+          <div className="flex items-center gap-3">
+            <p className="text-amber-400 text-xs">
+              Laden der Mitgliederliste abgebrochen. Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
+            </p>
+            <button
+              type="button"
+              onClick={() => chatId && loadMembers(chatId)}
+              className="text-[#888aaa] hover:text-[#e0e0f0] text-xs px-2 py-0.5 rounded border border-[#3a3a5a] hover:border-[#7c6af7] transition-colors whitespace-nowrap"
+            >
+              Erneut laden
+            </button>
+          </div>
         )}
 
         {membersUnavailable && !membersLoading && (
@@ -567,6 +605,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersUnavailable, setMembersUnavailable] = useState(false);
+  const [membersCancelled, setMembersCancelled] = useState(false);
   const [membersCount, setMembersCount] = useState(0);
 
   // Member selected from autocomplete (drives member card)
@@ -631,18 +670,31 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
   useEffect(() => {
     if (!chatId || chatId === prevChatIdRef.current) return;
     prevChatIdRef.current = chatId;
+    loadMembers(chatId);
+  }, [chatId]);
+
+  function loadMembers(id: number) {
     setMembers([]);
     setMembersCount(0);
     setMembersLoading(true);
     setMembersUnavailable(false);
-    invoke<ChatMember[]>("load_chat_members", { chatId })
+    setMembersCancelled(false);
+    invoke<ChatMember[]>("load_chat_members", { chatId: id })
       .then(setMembers)
       .catch((e) => {
-        console.error("Mitglieder laden fehlgeschlagen:", e);
-        setMembersUnavailable(true);
+        if (String(e).includes("Abgebrochen")) {
+          setMembersCancelled(true);
+        } else {
+          console.error("Mitglieder laden fehlgeschlagen:", e);
+          setMembersUnavailable(true);
+        }
       })
       .finally(() => setMembersLoading(false));
-  }, [chatId]);
+  }
+
+  function handleCancelMembers() {
+    invoke("cancel_load_chat_members").catch(() => {});
+  }
 
   // ── Close dropdown on outside click ──────────────────────────────────────
   useEffect(() => {
@@ -786,9 +838,33 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
         </label>
 
         {membersLoading && (
-          <p className="text-[#888aaa] text-xs animate-pulse">
-            {t("first_mention.members_loading", { count: membersCount })}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-[#888aaa] text-xs animate-pulse">
+              {t("first_mention.members_loading", { count: membersCount })}
+            </p>
+            <button
+              type="button"
+              onClick={handleCancelMembers}
+              className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-xs font-semibold px-2 py-0.5 rounded transition-colors whitespace-nowrap"
+            >
+              ✕ Abbrechen
+            </button>
+          </div>
+        )}
+
+        {membersCancelled && !membersLoading && (
+          <div className="flex items-center gap-3">
+            <p className="text-amber-400 text-xs">
+              Laden der Mitgliederliste abgebrochen. Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
+            </p>
+            <button
+              type="button"
+              onClick={() => chatId && loadMembers(chatId)}
+              className="text-[#888aaa] hover:text-[#e0e0f0] text-xs px-2 py-0.5 rounded border border-[#3a3a5a] hover:border-[#7c6af7] transition-colors whitespace-nowrap"
+            >
+              Erneut laden
+            </button>
+          </div>
         )}
 
         {membersUnavailable && !membersLoading && (

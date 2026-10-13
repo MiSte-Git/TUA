@@ -387,7 +387,7 @@ Sucht Ein- und Austrittsereignisse eines bestimmten Benutzers anhand von Telegra
 | **Ereignistyp wählen** | Filter für hinzugefügt, beigetreten, verlassen und entfernt setzen |
 | **Datumsbereich optional setzen** | `Zurück bis Datum` begrenzt die Suche nach hinten; `Bis Datum` begrenzt nach vorne, leer bedeutet heute. Datumsformat: `TT.MM.JJJJ` |
 | **Suchen** | Durchsucht den Admin-Log, falls verfügbar, und fällt sonst auf den Chatverlauf zurück |
-| **Abbrechen** | Laufende Suche kann abgebrochen werden |
+| **Abbrechen** | Laufende Suche und das Laden der Mitgliederliste können abgebrochen werden |
 
 **Ergebnis:**
 

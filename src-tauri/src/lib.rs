@@ -1,3 +1,4 @@
+mod cancel;
 mod config;
 mod telegram;
 
@@ -152,10 +153,18 @@ async fn get_auth_status() -> Result<bool, String> {
 // ── Analysis commands ─────────────────────────────────────────────────────────
 
 #[tauri::command]
-async fn resolve_chat(chat_url: String) -> Result<ChatInfo, String> {
-    telegram::analysis::resolve_chat(&chat_url)
-        .await
-        .map_err(|e: AnalysisError| e.to_string())
+async fn resolve_chat(chat_url: String, app: tauri::AppHandle) -> Result<ChatInfo, String> {
+    cancel::run(cancel::Kind::Resolve, &app, "Verbinden abgebrochen.", async {
+        telegram::analysis::resolve_chat(&chat_url)
+            .await
+            .map_err(|e: AnalysisError| e.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+fn cancel_resolve_chat() {
+    cancel::cancel(cancel::Kind::Resolve);
 }
 
 #[tauri::command]
@@ -168,17 +177,21 @@ async fn run_analysis(
     force_full: Option<bool>,
     app: tauri::AppHandle,
 ) -> Result<AnalysisResult, String> {
-    telegram::analysis::run_analysis(
-        &chat_url,
-        months,
-        include_reactions,
-        date_from,
-        date_to,
-        force_full.unwrap_or(false),
-        app,
-    )
+    let handle = app.clone();
+    cancel::run(cancel::Kind::Analysis, &handle, "Analyse abgebrochen.", async move {
+        telegram::analysis::run_analysis(
+            &chat_url,
+            months,
+            include_reactions,
+            date_from,
+            date_to,
+            force_full.unwrap_or(false),
+            app,
+        )
+        .await
+        .map_err(|e: AnalysisError| e.to_string())
+    })
     .await
-    .map_err(|e: AnalysisError| e.to_string())
 }
 
 #[tauri::command]
@@ -201,6 +214,7 @@ fn analysis_cache_status(chat_id: i64) -> Option<telegram::cache::CacheStatus> {
 #[tauri::command]
 fn cancel_analysis() {
     telegram::analysis::cancel();
+    cancel::cancel(cancel::Kind::Analysis);
 }
 
 #[tauri::command]
@@ -278,7 +292,18 @@ async fn load_chat_members(
     let client = telegram::auth::get_client()
         .await
         .ok_or("Not authorized")?;
-    telegram::mention::load_chat_members(&client, chat_id, &app).await
+    cancel::run(
+        cancel::Kind::Members,
+        &app,
+        "Laden der Mitgliederliste abgebrochen.",
+        telegram::mention::load_chat_members(&client, chat_id, &app),
+    )
+    .await
+}
+
+#[tauri::command]
+fn cancel_load_chat_members() {
+    cancel::cancel(cancel::Kind::Members);
 }
 
 // ── First-mention commands ────────────────────────────────────────────────────
@@ -286,11 +311,13 @@ async fn load_chat_members(
 #[tauri::command]
 fn cancel_first_mention() {
     telegram::mention::cancel();
+    cancel::cancel(cancel::Kind::Mention);
 }
 
 #[tauri::command]
 fn cancel_join_leave_events() {
     telegram::mention::cancel();
+    cancel::cancel(cancel::Kind::Mention);
 }
 
 #[tauri::command]
@@ -303,7 +330,13 @@ async fn find_first_mention(
     let client = telegram::auth::get_client()
         .await
         .ok_or("Not authorized")?;
-    telegram::mention::find_first_mention(&client, chat_id, chat_username, username, &app).await
+    cancel::run(
+        cancel::Kind::Mention,
+        &app,
+        "Suche abgebrochen.",
+        telegram::mention::find_first_mention(&client, chat_id, chat_username, username, &app),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -320,16 +353,21 @@ async fn find_join_leave_events(
     let client = telegram::auth::get_client()
         .await
         .ok_or("Not authorized")?;
-    telegram::mention::find_join_leave_events(
-        &client,
-        chat_id,
-        user_id,
-        username,
-        display_name,
-        event_types,
-        date_from,
-        date_to,
+    cancel::run(
+        cancel::Kind::Mention,
         &app,
+        "Suche abgebrochen.",
+        telegram::mention::find_join_leave_events(
+            &client,
+            chat_id,
+            user_id,
+            username,
+            display_name,
+            event_types,
+            date_from,
+            date_to,
+            &app,
+        ),
     )
     .await
 }
@@ -358,7 +396,7 @@ pub fn run() {
                     let _ = handle.emit(
                         "log",
                         format!(
-                            "Interner Fehler: {}. Bitte den Vorgang mit Stopp abbrechen und erneut versuchen.",
+                            "Interner Fehler: {}. Bitte den Vorgang abbrechen und erneut versuchen.",
                             info
                         ),
                     );
@@ -380,6 +418,7 @@ pub fn run() {
             submit_password,
             get_auth_status,
             resolve_chat,
+            cancel_resolve_chat,
             run_analysis,
             analysis_from_cache,
             analysis_cache_status,
@@ -390,6 +429,7 @@ pub fn run() {
             export_join_leave_csv,
             suggested_filename,
             load_chat_members,
+            cancel_load_chat_members,
             cancel_first_mention,
             cancel_join_leave_events,
             find_first_mention,
