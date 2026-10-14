@@ -5,14 +5,18 @@ interface Props {
 }
 
 export default function LogWindow({ logs }: Props) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Nur den Log-Container selbst scrollen. scrollIntoView() wuerde auch das
+  // Fenster mitscrollen und beim Start die Seite nach unten ziehen.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = containerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [logs]);
 
   return (
     <div
+      ref={containerRef}
       className="bg-[#111120] rounded-xl p-3 font-mono text-sm text-[#a0ffa0] flex flex-col"
       style={{ resize: "vertical", overflow: "auto", minHeight: "80px", height: "200px" }}
     >
@@ -25,7 +29,6 @@ export default function LogWindow({ logs }: Props) {
           </span>
         ))
       )}
-      <div ref={bottomRef} />
     </div>
   );
 }

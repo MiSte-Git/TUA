@@ -1,14 +1,15 @@
 import { useTranslation } from "react-i18next";
 import CustomSelect from "./CustomSelect";
+import { SUPPORTED_LANGUAGES } from "../i18n";
 
-const LANG_OPTIONS = [
-  { value: "de", label: "🇩🇪 DE" },
-  { value: "en", label: "🇬🇧 EN" },
-];
+const LANG_OPTIONS = SUPPORTED_LANGUAGES.map((l) => ({
+  value: l.code,
+  label: `${l.flag} ${l.code.toUpperCase()}`,
+}));
 
 export default function LanguageSelector() {
   const { i18n } = useTranslation();
-  const lang = i18n.language?.startsWith("en") ? "en" : "de";
+  const lang = i18n.resolvedLanguage ?? "de";
 
   return (
     <CustomSelect
