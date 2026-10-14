@@ -100,7 +100,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#1e1e2e] flex items-center justify-center">
         <UpdateBanner />
-        <p className="text-[#888aaa] animate-pulse">Verbinde…</p>
+        <p className="text-[#888aaa] animate-pulse">{t("login.connecting")}</p>
       </div>
     );
   }
@@ -160,7 +160,7 @@ export default function App() {
             onClick={() => setActiveTab("join_leave")}
             className={`${tabBase} ${activeTab === "join_leave" ? tabActive : tabInactive}`}
           >
-            Ein/Austritt
+            {t("tabs.join_leave")}
           </button>
           {result && result.all_bots.length > 0 && (
             <button

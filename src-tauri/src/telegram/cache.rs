@@ -164,19 +164,19 @@ pub fn compute_window(
         let from = now - Duration::days(months as i64 * 30);
         return Ok((from.timestamp(), now.timestamp(), None, None));
     }
-    let from_str = date_from.ok_or_else(|| AnalysisError::InvalidUrl("date_from fehlt".into()))?;
+    let from_str = date_from.ok_or_else(|| AnalysisError::InvalidUrl(tr!("backend.err.date_from_missing")))?;
     let to_str = date_to.unwrap_or_else(|| now.format("%Y-%m-%d").to_string());
     let parse = |s: &str| {
         NaiveDate::parse_from_str(s, "%Y-%m-%d")
-            .map_err(|_| AnalysisError::InvalidUrl(format!("Ungültiges Datum: {}", s)))
+            .map_err(|_| AnalysisError::InvalidUrl(tr!("backend.err.invalid_date", value = s)))
     };
     let from = parse(&from_str)?
         .and_hms_opt(0, 0, 0)
-        .ok_or_else(|| AnalysisError::InvalidUrl("Ungültiges Datum".into()))?
+        .ok_or_else(|| AnalysisError::InvalidUrl(tr!("backend.err.invalid_date", value = "")))?
         .and_utc();
     let to = parse(&to_str)?
         .and_hms_opt(23, 59, 59)
-        .ok_or_else(|| AnalysisError::InvalidUrl("Ungültiges Datum".into()))?
+        .ok_or_else(|| AnalysisError::InvalidUrl(tr!("backend.err.invalid_date", value = "")))?
         .and_utc();
     Ok((from.timestamp(), to.min(now).timestamp(), Some(from_str), Some(to_str)))
 }

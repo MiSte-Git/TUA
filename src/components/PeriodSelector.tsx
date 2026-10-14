@@ -1,7 +1,14 @@
-import DatePicker from "react-datepicker";
+import DatePicker, { registerLocale } from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { de, enGB, es, fi, fr, hr, it, nl, pl, ru } from "date-fns/locale";
 import { useTranslation } from "react-i18next";
 import CustomSelect from "./CustomSelect";
+
+// Kalender (Monats- und Wochentagsnamen) in der UI-Sprache
+const PICKER_LOCALES = { de, en: enGB, es, fi, fr, hr, it, nl, pl, ru };
+for (const [code, locale] of Object.entries(PICKER_LOCALES)) {
+  registerLocale(code, locale);
+}
 
 interface Props {
   months: number; // 1/3/6/9/12, or 0 = custom
@@ -25,7 +32,8 @@ export default function PeriodSelector({
   onChangeDates,
   disabled,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const pickerLocale = i18n.resolvedLanguage ?? "de";
   const isCustom = months === 0;
 
   const periodOptions = [
@@ -64,7 +72,8 @@ export default function PeriodSelector({
             selected={dateFrom}
             onChange={(date: Date | null) => onChangeDates(date, dateTo)}
             dateFormat="dd.MM.yyyy"
-            placeholderText="TT.MM.JJJJ"
+            placeholderText={t("period.date_placeholder")}
+            locale={pickerLocale}
             disabled={disabled}
             className={pickerInputClass}
             popperPlacement="bottom-start"
@@ -75,7 +84,8 @@ export default function PeriodSelector({
               selected={dateTo}
               onChange={(date: Date | null) => onChangeDates(dateFrom, date)}
               dateFormat="dd.MM.yyyy"
-              placeholderText="TT.MM.JJJJ"
+              placeholderText={t("period.date_placeholder")}
+              locale={pickerLocale}
               disabled={disabled}
               className={pickerInputClass}
               popperPlacement="bottom-start"

@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
+import { Trans, useTranslation } from "react-i18next";
 import type { ConnectResult, CredentialsStatus } from "../types";
+import { translateBackend } from "../utils/backendMessage";
 
 interface Props {
   onSuccess: () => void;
@@ -10,6 +12,7 @@ interface Props {
 type Step = "checking" | "credentials" | "phone" | "code" | "password";
 
 export default function LoginFlow({ onSuccess }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>("checking");
 
   // Credentials form
@@ -56,14 +59,14 @@ export default function LoginFlow({ onSuccess }: Props) {
 
     const parsed = parseInt(apiId, 10);
     if (!apiId.trim() || isNaN(parsed) || parsed <= 0) {
-      setApiIdError("Bitte eine gültige positive Zahl eingeben");
+      setApiIdError(t("login.api_id_invalid"));
       valid = false;
     } else {
       setApiIdError(null);
     }
 
     if (apiHash.trim().length !== 32) {
-      setApiHashError("Der API Hash muss genau 32 Zeichen lang sein");
+      setApiHashError(t("login.api_hash_invalid"));
       valid = false;
     } else {
       setApiHashError(null);
@@ -77,7 +80,7 @@ export default function LoginFlow({ onSuccess }: Props) {
       await invoke("save_credentials", { apiId: parsed, apiHash: apiHash.trim() });
       setStep("phone");
     } catch (e) {
-      setError(String(e));
+      setError(translateBackend(e));
     } finally {
       setLoading(false);
     }
@@ -97,7 +100,7 @@ export default function LoginFlow({ onSuccess }: Props) {
         setStep("password");
       }
     } catch (e) {
-      setError(String(e));
+      setError(translateBackend(e));
     } finally {
       setLoading(false);
     }
@@ -115,7 +118,7 @@ export default function LoginFlow({ onSuccess }: Props) {
         setStep("password");
       }
     } catch (e) {
-      setError(String(e));
+      setError(translateBackend(e));
     } finally {
       setLoading(false);
     }
@@ -128,7 +131,7 @@ export default function LoginFlow({ onSuccess }: Props) {
       await invoke("submit_password", { password });
       onSuccess();
     } catch (e) {
-      setError(String(e));
+      setError(translateBackend(e));
     } finally {
       setLoading(false);
     }
@@ -146,13 +149,13 @@ export default function LoginFlow({ onSuccess }: Props) {
         Telegram User Activities
       </h1>
       <p className="text-[#888aaa] text-sm mb-6">
-        {step === "credentials" ? "API Zugangsdaten" : "Bitte anmelden"}
+        {step === "credentials" ? t("login.subtitle_credentials") : t("login.subtitle_login")}
       </p>
 
       {/* Checking step */}
       {step === "checking" && (
         <p className="text-[#888aaa] text-sm animate-pulse">
-          Überprüfe Konfiguration…
+          {t("login.checking")}
         </p>
       )}
 
@@ -162,7 +165,7 @@ export default function LoginFlow({ onSuccess }: Props) {
           <CredentialsGuide />
           {/* API ID */}
           <div className="flex flex-col gap-1">
-            <label className="text-[#e0e0f0] text-sm font-medium">API ID</label>
+            <label className="text-[#e0e0f0] text-sm font-medium">{t("login.api_id")}</label>
             <input
               type="number"
               placeholder="12345678"
@@ -180,7 +183,7 @@ export default function LoginFlow({ onSuccess }: Props) {
 
           {/* API Hash */}
           <div className="flex flex-col gap-1">
-            <label className="text-[#e0e0f0] text-sm font-medium">API Hash</label>
+            <label className="text-[#e0e0f0] text-sm font-medium">{t("login.api_hash")}</label>
             <div className="relative">
               <input
                 type={showApiHash ? "text" : "password"}
@@ -206,7 +209,7 @@ export default function LoginFlow({ onSuccess }: Props) {
 
           {/* Info link */}
           <p className="text-[#888aaa] text-xs">
-            Diese Zugangsdaten erhältst du auf{" "}
+            {t("login.credentials_source")}{" "}
             <button
               type="button"
               onClick={() => open("https://my.telegram.org")}
@@ -221,7 +224,7 @@ export default function LoginFlow({ onSuccess }: Props) {
             disabled={loading || !apiId.trim() || !apiHash.trim()}
             className={btnClass}
           >
-            {loading ? "Speichere…" : "Speichern und weiter"}
+            {loading ? t("login.saving") : t("login.save_continue")}
           </button>
         </div>
       )}
@@ -230,11 +233,11 @@ export default function LoginFlow({ onSuccess }: Props) {
       {step === "phone" && (
         <div className="flex flex-col gap-4">
           <label className="text-[#e0e0f0] text-sm font-medium">
-            Telefonnummer
+            {t("login.phone")}
           </label>
           <input
             type="tel"
-            placeholder="+41791234567 oder 0041791234567"
+            placeholder={t("login.phone_placeholder")}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !loading && handlePhone()}
@@ -246,7 +249,7 @@ export default function LoginFlow({ onSuccess }: Props) {
             disabled={loading || !phone.trim()}
             className={btnClass}
           >
-            {loading ? "Verbinde…" : "Weiter"}
+            {loading ? t("login.connecting") : t("login.next")}
           </button>
 
           {/* Link to change credentials */}
@@ -255,7 +258,7 @@ export default function LoginFlow({ onSuccess }: Props) {
             onClick={() => { setStep("credentials"); setError(null); }}
             className="text-[#888aaa] text-xs hover:text-[#e0e0f0] transition-colors underline self-center"
           >
-            API Credentials ändern
+            {t("login.change_credentials")}
           </button>
         </div>
       )}
@@ -264,12 +267,10 @@ export default function LoginFlow({ onSuccess }: Props) {
       {step === "code" && (
         <div className="flex flex-col gap-4">
           <label className="text-[#e0e0f0] text-sm font-medium">
-            Anmeldecode eingeben
+            {t("login.code_label")}
           </label>
           <p className="text-[#888aaa] text-xs">
-            Telegram hat einen Code an {phone} gesendet - je nach Konto per SMS
-            oder als Nachricht im "Telegram"-Chat (Systembenachrichtigungen)
-            in einer bereits angemeldeten Telegram-App.
+            {t("login.code_hint", { phone })}
           </p>
           <div className="relative">
             <input
@@ -295,7 +296,7 @@ export default function LoginFlow({ onSuccess }: Props) {
             disabled={loading || !code.trim()}
             className={btnClass}
           >
-            {loading ? "Prüfe Code…" : "Bestätigen"}
+            {loading ? t("login.checking_code") : t("login.confirm")}
           </button>
 
           {/* Back to phone step: lets the user re-request a code if none arrived */}
@@ -309,7 +310,7 @@ export default function LoginFlow({ onSuccess }: Props) {
             disabled={loading}
             className="text-[#888aaa] text-xs hover:text-[#e0e0f0] transition-colors underline self-center disabled:opacity-50"
           >
-            Zurück / Code erneut anfordern
+            {t("login.back_resend")}
           </button>
         </div>
       )}
@@ -318,18 +319,18 @@ export default function LoginFlow({ onSuccess }: Props) {
       {step === "password" && (
         <div className="flex flex-col gap-4">
           <label className="text-[#e0e0f0] text-sm font-medium">
-            Telegram-Passwort eingeben
+            {t("login.password_label")}
           </label>
           {passwordHint && (
-            <p className="text-[#888aaa] text-xs">Hinweis: {passwordHint}</p>
+            <p className="text-[#888aaa] text-xs">{t("login.password_hint", { hint: passwordHint })}</p>
           )}
           {capsLock && (
-            <p className="text-yellow-400 text-xs">⚠️ Caps Lock ist aktiviert</p>
+            <p className="text-yellow-400 text-xs">⚠️ {t("login.caps_lock")}</p>
           )}
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
-              placeholder="Passwort"
+              placeholder={t("login.password_placeholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => {
@@ -353,7 +354,7 @@ export default function LoginFlow({ onSuccess }: Props) {
             disabled={loading || !password}
             className={btnClass}
           >
-            {loading ? "Anmelden…" : "Anmelden"}
+            {loading ? t("login.signing_in") : t("login.sign_in")}
           </button>
         </div>
       )}
@@ -370,100 +371,53 @@ export default function LoginFlow({ onSuccess }: Props) {
 
 /** Step-by-step guide for first-time users to obtain api_id / api_hash. */
 function CredentialsGuide() {
+  const { t } = useTranslation();
   const stepClass = "flex gap-3";
   const num =
     "shrink-0 w-5 h-5 rounded-full bg-[#7c6af7] text-white text-[11px] font-bold flex items-center justify-center mt-0.5";
+  const rich = { b: <b />, i: <i />, code: <code /> };
+  const telegramLink = (
+    <button
+      type="button"
+      onClick={() => open("https://my.telegram.org")}
+      className="text-[#7c6af7] underline hover:text-[#a090ff]"
+    />
+  );
+  const why = ["why_1", "why_2", "why_3", "why_4"];
   return (
     <details open className="bg-[#1e1e2e] border border-[#3a3a5a] rounded-lg p-4 text-sm text-[#c8c8e0]">
       <summary className="cursor-pointer font-semibold text-[#e0e0f0] select-none">
-        So bekommst du die Zugangsdaten (einmalig, ca. 3 Minuten)
+        {t("login.guide.title")}
       </summary>
-      <p className="text-[#888aaa] text-xs mt-2">
-        Die App liest Telegram mit deinem eigenen Konto. Dafür verlangt Telegram eigene
-        Zugangsdaten, die du kostenlos selbst anlegst.
-      </p>
+      <p className="text-[#888aaa] text-xs mt-2">{t("login.guide.intro")}</p>
       <details className="mt-2 text-xs text-[#888aaa]">
         <summary className="cursor-pointer text-[#7c6af7] hover:text-[#a090ff] select-none">
-          Warum brauche ich das?
+          {t("login.guide.why_title")}
         </summary>
         <ul className="mt-2 flex flex-col gap-1.5 list-disc pl-4">
-          <li>
-            Telegram verlangt für jedes Programm, das sich mit einem Konto anmeldet, eine{" "}
-            <code>api_id</code> und einen <code>api_hash</code>. Sie kennzeichnen die App, nicht dich
-            als Entwickler. Trotz des Namens „API development tools“ musst du nichts programmieren.
-          </li>
-          <li>
-            Ein Bot reicht nicht: Bots sehen keinen alten Chatverlauf und könnten vergangene Monate
-            nicht auswerten.
-          </li>
-          <li>
-            Eigene Zugangsdaten schützen dich: Würden alle Nutzer dieselben Daten teilen, könnte ein
-            Problem bei einer anderen Person die App für alle sperren. Mit deinen eigenen Daten hängt
-            nichts vom Verhalten anderer ab.
-          </li>
-          <li>Das Anlegen ist kostenlos und nur einmal nötig.</li>
+          {why.map((key) => (
+            <li key={key}>
+              <Trans i18nKey={`login.guide.${key}`} components={rich} />
+            </li>
+          ))}
         </ul>
       </details>
       <ol className="flex flex-col gap-2.5 mt-3">
-        <li className={stepClass}>
-          <span className={num}>1</span>
-          <span>
-            Öffne{" "}
-            <button
-              type="button"
-              onClick={() => open("https://my.telegram.org")}
-              className="text-[#7c6af7] underline hover:text-[#a090ff]"
-            >
-              my.telegram.org
-            </button>{" "}
-            im Browser.
-          </span>
-        </li>
-        <li className={stepClass}>
-          <span className={num}>2</span>
-          <span>
-            Gib deine Telefonnummer mit Ländervorwahl ein, z. B. <code>+41791234567</code>, und
-            klicke <b>Next</b>.
-          </span>
-        </li>
-        <li className={stepClass}>
-          <span className={num}>3</span>
-          <span>
-            Telegram schickt dir einen Code <b>in die Telegram-App</b> (Chat „Telegram“, nicht per
-            SMS). Code eingeben und <b>Sign In</b> klicken.
-          </span>
-        </li>
-        <li className={stepClass}>
-          <span className={num}>4</span>
-          <span>
-            Klicke auf <b>API development tools</b>.
-          </span>
-        </li>
-        <li className={stepClass}>
-          <span className={num}>5</span>
-          <span>
-            Formular ausfüllen: <b>App title</b> z. B. <code>TUA</code>, <b>Short name</b> z. B.{" "}
-            <code>tua2026</code> (nur Buchstaben und Zahlen, mind. 5 Zeichen), <b>URL</b> leer
-            lassen, <b>Platform</b> <i>Desktop</i>. Dann <b>Create application</b>.
-          </span>
-        </li>
-        <li className={stepClass}>
-          <span className={num}>6</span>
-          <span>
-            Kopiere <b>App api_id</b> (eine Zahl) und <b>App api_hash</b> (32 Zeichen) in die
-            Felder unten.
-          </span>
-        </li>
+        {[1, 2, 3, 4, 5, 6].map((n) => (
+          <li key={n} className={stepClass}>
+            <span className={num}>{n}</span>
+            <span>
+              <Trans
+                i18nKey={`login.guide.step_${n}`}
+                components={{ ...rich, link: telegramLink }}
+              />
+            </span>
+          </li>
+        ))}
       </ol>
       <div className="mt-3 pt-3 border-t border-[#3a3a5a] text-xs text-[#888aaa] flex flex-col gap-1">
-        <p>
-          🔒 Die Zugangsdaten gehören zu deinem Telegram-Konto. Nicht weitergeben. Die App speichert
-          sie nur lokal auf diesem Rechner.
-        </p>
-        <p>
-          ⚠ Zeigt my.telegram.org beim Erstellen nur „ERROR“: anderen Short name wählen, VPN oder
-          Werbeblocker ausschalten oder einen anderen Browser versuchen.
-        </p>
+        <p>🔒 {t("login.guide.note_private")}</p>
+        <p>⚠ {t("login.guide.note_error")}</p>
       </div>
     </details>
   );

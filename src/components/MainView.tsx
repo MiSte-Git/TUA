@@ -8,6 +8,9 @@ import Controls from "./Controls";
 import ResultsTable from "./ResultsTable";
 import Tooltip from "./Tooltip";
 import { loadLastExportDir, saveLastExportDir } from "../utils/exportDir";
+import { fmtIsoDate, fmtNum, fmtDate, fmtDateTime } from "../utils/format";
+import { translateBackend } from "../utils/backendMessage";
+import { csvLabels } from "../utils/csvLabels";
 
 interface Props {
   chatInfo: ChatInfo | null;
@@ -48,13 +51,11 @@ function loadST(chatId: number) { return loadMap(ST_KEY(chatId)); }
 function saveST(chatId: number, map: Map<number, string>) { saveMap(ST_KEY(chatId), map); }
 
 function fmt(n: number) {
-  return n.toLocaleString("de-CH");
+  return fmtNum(n);
 }
 
 function fmtDateShort(iso?: string | null) {
-  if (!iso) return "?";
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
+  return fmtIsoDate(iso);
 }
 
 function StatRow({
@@ -229,9 +230,7 @@ export default function MainView({
 
   function fmtTs(ts: number, withTime = false) {
     const d = new Date(ts * 1000);
-    const p = (n: number) => String(n).padStart(2, "0");
-    const date = `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
-    return withTime ? `${date} ${p(d.getHours())}:${p(d.getMinutes())}` : date;
+    return withTime ? fmtDateTime(d) : fmtDate(d);
   }
 
   function handleStop() {
@@ -251,8 +250,8 @@ export default function MainView({
       const to = result.scan_to ?? result.period_to;
       const period =
         from && to
-          ? `${from}_bis_${to}`
-          : `letzte_${result.period_months}_Monate`;
+          ? t("export.filename_range", { from, to })
+          : t("export.filename_months", { count: result.period_months });
       const suggested = await invoke<string>("suggested_filename", {
         chatInfo,
         period,
@@ -277,10 +276,11 @@ export default function MainView({
           excluded_ids: Array.from(excludedMembers.keys()),
           st_ids: Array.from(stMembers.keys()),
         },
+        labels: csvLabels(result.period_months),
       });
       setExportStatus({ ok: true, text: t("export.done", { count: written.length }) });
     } catch (e) {
-      setExportStatus({ ok: false, text: `${t("export.failed")}: ${String(e)}` });
+      setExportStatus({ ok: false, text: `${t("export.failed")}: ${translateBackend(e)}` });
     }
   }
 
@@ -540,7 +540,7 @@ export default function MainView({
                         onSwitchToBotsTab ? "cursor-pointer hover:opacity-80" : ""
                       }`}
                       onClick={onSwitchToBotsTab}
-                      title={onSwitchToBotsTab ? "Bot-Tab öffnen" : undefined}
+                      title={onSwitchToBotsTab ? t("stats.open_bots_tab") : undefined}
                     >
                       <span className="text-sm text-[#888aaa]">
                         {t("stats.bots")}
@@ -595,7 +595,7 @@ export default function MainView({
                       <span>{t("stats.st_total")}</span>
                     </Tooltip>
                   }
-                  value={`${fmt(stCount)} von ${fmt(totalMembers)}`}
+                  value={t("stats.x_of_y", { x: fmt(stCount), y: fmt(totalMembers) })}
                   badge={totalMembers > 0 ? `(${((stCount / totalMembers) * 100).toFixed(1)}%)` : undefined}
                 />
                 <StatRow
@@ -604,7 +604,7 @@ export default function MainView({
                       <span>{t("stats.st_truly_active")}</span>
                     </Tooltip>
                   }
-                  value={`${fmt(stActive)} von ${fmt(trulyActive)}`}
+                  value={t("stats.x_of_y", { x: fmt(stActive), y: fmt(trulyActive) })}
                   badge={trulyActive > 0 ? `(${((stActive / trulyActive) * 100).toFixed(1)}%)` : undefined}
                 />
                 <StatRow
@@ -614,7 +614,7 @@ export default function MainView({
                     </Tooltip>
                   }
                   value={fmt(totalMessages)}
-                  badge={totalMessages > 0 ? `davon ${((stTotalMessages / totalMessages) * 100).toFixed(1)}% ST` : undefined}
+                  badge={totalMessages > 0 ? t("stats.st_share", { pct: ((stTotalMessages / totalMessages) * 100).toFixed(1) }) : undefined}
                 />
                 <StatRow
                   label={
@@ -623,7 +623,7 @@ export default function MainView({
                     </Tooltip>
                   }
                   value={fmt(activeMessages)}
-                  badge={activeMessages > 0 ? `davon ${((stActiveMessages / activeMessages) * 100).toFixed(1)}% ST` : undefined}
+                  badge={activeMessages > 0 ? t("stats.st_share", { pct: ((stActiveMessages / activeMessages) * 100).toFixed(1) }) : undefined}
                 />
                 {totalPollsInPeriod > 0 && totalPollParticipations > 0 && (
                   <StatRow
@@ -633,7 +633,7 @@ export default function MainView({
                       </Tooltip>
                     }
                     value={fmt(totalPollParticipations)}
-                    badge={`davon ${((stTotalPollParticipations / totalPollParticipations) * 100).toFixed(1)}% ST`}
+                    badge={t("stats.st_share", { pct: ((stTotalPollParticipations / totalPollParticipations) * 100).toFixed(1) })}
                   />
                 )}
               </div>

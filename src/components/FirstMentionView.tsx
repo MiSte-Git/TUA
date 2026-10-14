@@ -18,6 +18,9 @@ import {
   saveLastExportDir,
   todayIso,
 } from "../utils/exportDir";
+import { isCancelled, translateBackend } from "../utils/backendMessage";
+import { csvLabels } from "../utils/csvLabels";
+import { fmtDate as fmtDay, fmtDateTime } from "../utils/format";
 
 interface Props {
   chatId?: number | null;
@@ -26,9 +29,12 @@ interface Props {
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return "–";
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return fmtDateTime(new Date(iso));
+}
+
+function fmtDateOnly(iso?: string | null): string {
+  if (!iso) return "–";
+  return fmtDay(new Date(iso));
 }
 
 function Row({
@@ -54,12 +60,7 @@ function Divider() {
   return <div className="border-t border-[#3a3a5a] my-1" />;
 }
 
-const joinLeaveLabels: Record<JoinLeaveEventType, string> = {
-  added: "hinzugefügt",
-  joined: "beigetreten",
-  left: "verlassen",
-  removed: "entfernt",
-};
+const JOIN_LEAVE_TYPES: JoinLeaveEventType[] = ["added", "joined", "left", "removed"];
 
 interface JoinLeaveSearchParams {
   search: string;
@@ -146,10 +147,10 @@ export function JoinLeaveView({
     invoke<ChatMember[]>("load_chat_members", { chatId: id })
       .then(setMembers)
       .catch((e) => {
-        if (String(e).includes("Abgebrochen")) {
+        if (isCancelled(e)) {
           setMembersCancelled(true);
         } else {
-          console.error("Mitglieder laden fehlgeschlagen:", e);
+          console.error("Loading members failed:", translateBackend(e));
           setMembersUnavailable(true);
         }
       })
@@ -263,11 +264,10 @@ export function JoinLeaveView({
       setResult(res);
       setLastSearch(params);
     } catch (e) {
-      const msg = String(e);
-      if (msg.includes("Abgebrochen")) {
+      if (isCancelled(e)) {
         setCancelled(true);
       } else {
-        setError(msg);
+        setError(translateBackend(e));
       }
     } finally {
       setLoading(false);
@@ -307,12 +307,12 @@ export function JoinLeaveView({
     setExportError(null);
     setExportDone(false);
     try {
-      const from = normalizeDate(lastSearch.date_from) ?? "Anfang";
+      const from = normalizeDate(lastSearch.date_from) ?? t("join_leave.filename_start");
       const to = normalizeDate(lastSearch.date_to) ?? todayIso();
       const who = (lastSearch.username ? `@${lastSearch.username}` : lastSearch.search).replace(/^@/, "");
       const suggested = await invoke<string>("suggested_filename", {
         chatInfo,
-        period: `Ein-Austritt_${who}_${from}_bis_${to}`,
+        period: t("join_leave.filename", { who, from, to }),
       });
       const lastDir = loadLastExportDir();
       const defaultPath = lastDir ? `${lastDir}/${suggested}` : suggested;
@@ -327,17 +327,18 @@ export function JoinLeaveView({
         chatInfo,
         path,
         filter: lastSearch,
+        labels: csvLabels(),
       });
       setExportDone(true);
     } catch (e) {
-      setExportError(String(e));
+      setExportError(translateBackend(e));
     }
   }
 
   if (!chatId) {
     return (
       <div className="flex-1 bg-[#1e1e2e] rounded-xl flex items-center justify-center min-h-[8rem]">
-        <p className="text-[#3a3a5a] text-sm">Bitte zuerst einen Chat auflösen</p>
+        <p className="text-[#3a3a5a] text-sm">{t("common.resolve_chat_first")}</p>
       </div>
     );
   }
@@ -346,20 +347,20 @@ export function JoinLeaveView({
     <div className="flex-1 flex flex-col gap-4 min-h-0">
       <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-3">
         <label className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-          Username
+          {t("common.username")}
         </label>
 
         {membersLoading && (
           <div className="flex items-center gap-3">
             <p className="text-[#888aaa] text-xs animate-pulse">
-              Mitglieder werden geladen… {membersCount}
+              {t("first_mention.members_loading", { count: membersCount })}
             </p>
             <button
               type="button"
               onClick={handleCancelMembers}
               className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-xs font-semibold px-2 py-0.5 rounded transition-colors whitespace-nowrap"
             >
-              ✕ Abbrechen
+              ✕ {t("common.cancel")}
             </button>
           </div>
         )}
@@ -367,22 +368,21 @@ export function JoinLeaveView({
         {membersCancelled && !membersLoading && (
           <div className="flex items-center gap-3">
             <p className="text-amber-400 text-xs">
-              Laden der Mitgliederliste abgebrochen. Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
+              {t("members.cancelled_hint")}
             </p>
             <button
               type="button"
               onClick={() => chatId && loadMembers(chatId)}
               className="text-[#888aaa] hover:text-[#e0e0f0] text-xs px-2 py-0.5 rounded border border-[#3a3a5a] hover:border-[#7c6af7] transition-colors whitespace-nowrap"
             >
-              Erneut laden
+              {t("common.reload")}
             </button>
           </div>
         )}
 
         {membersUnavailable && !membersLoading && (
           <p className="text-amber-400 text-xs">
-            Mitgliederliste nicht verfügbar (dafür sind in diesem Chat Admin-Rechte nötig).
-            Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
+            {t("members.unavailable_hint")}
           </p>
         )}
 
@@ -390,7 +390,7 @@ export function JoinLeaveView({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="@username oder Name"
+              placeholder={t("first_mention.search_placeholder")}
               value={username}
               onChange={(e) => {
                 setUsername(e.target.value);
@@ -410,7 +410,7 @@ export function JoinLeaveView({
               disabled={loading || !canSearch}
               className="bg-[#7c6af7] hover:bg-[#6a58e0] text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
-              {loading ? "Sucht…" : "Suchen"}
+              {loading ? t("first_mention.searching") : t("first_mention.search_button")}
             </button>
             {loading && (
               <button
@@ -418,7 +418,7 @@ export function JoinLeaveView({
                 onClick={handleCancel}
                 className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
               >
-                ✕ Abbrechen
+                ✕ {t("common.cancel")}
               </button>
             )}
           </div>
@@ -426,7 +426,7 @@ export function JoinLeaveView({
           {showDropdown && (
             <div className="absolute top-full left-0 right-14 mt-1 bg-[#2a2a3e] border border-[#3a3e5e] rounded-lg shadow-lg z-10 overflow-hidden">
               <div className="px-3 py-1.5 border-b border-[#3a3a5a]">
-                <span className="text-[#888aaa] text-xs">🔍 „{query}"</span>
+                <span className="text-[#888aaa] text-xs">🔍 "{query}"</span>
               </div>
               {filteredMembers.map((m, i) => (
                 <button
@@ -452,7 +452,7 @@ export function JoinLeaveView({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(joinLeaveLabels) as JoinLeaveEventType[]).map((type) => (
+          {JOIN_LEAVE_TYPES.map((type) => (
             <label
               key={type}
               className="flex items-center gap-2 bg-[#1e1e2e] border border-[#3a3a5a] rounded-lg px-3 py-1.5 text-sm text-[#e0e0f0]"
@@ -463,7 +463,7 @@ export function JoinLeaveView({
                 onChange={() => toggleEventType(type)}
                 disabled={loading}
               />
-              {joinLeaveLabels[type]}
+              {t(`join_leave.event_${type}`)}
             </label>
           ))}
         </div>
@@ -471,12 +471,12 @@ export function JoinLeaveView({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-              Zurück bis Datum
+              {t("join_leave.date_from_label")}
             </span>
             <input
               type="text"
               inputMode="numeric"
-              placeholder="TT.MM.JJJJ oder leer"
+              placeholder={t("join_leave.date_from_placeholder")}
               value={dateFrom}
               onChange={(e) => handleDateChange(setDateFrom, e)}
               disabled={loading}
@@ -485,12 +485,12 @@ export function JoinLeaveView({
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-              Bis Datum
+              {t("join_leave.date_to_label")}
             </span>
             <input
               type="text"
               inputMode="numeric"
-              placeholder="Heute oder TT.MM.JJJJ"
+              placeholder={t("join_leave.date_to_placeholder")}
               value={dateTo}
               onChange={(e) => handleDateChange(setDateTo, e)}
               disabled={loading}
@@ -501,21 +501,21 @@ export function JoinLeaveView({
 
         {selectedMember && (
           <p className="text-green-400 text-xs">
-            ✓ Mitglied ausgewählt: {selectedMember.name}
+            ✓ {t("join_leave.member_selected", { name: selectedMember.name })}
             {selectedMember.username ? ` (@${selectedMember.username})` : ""}
           </p>
         )}
         {!selectedMember && memberMatch && (
-          <p className="text-green-400 text-xs">✓ Mitglied gefunden: {memberMatch.name}</p>
+          <p className="text-green-400 text-xs">✓ {t("common.member_found", { name: memberMatch.name })}</p>
         )}
         {loading && (
           <div className="flex items-center gap-3">
-            <p className="text-[#888aaa] text-sm animate-pulse">Durchsuche Service-Messages…</p>
+            <p className="text-[#888aaa] text-sm animate-pulse">{t("join_leave.searching_service")}</p>
             <span className="text-yellow-400 text-xs tabular-nums font-mono">⏱ {formatted}</span>
           </div>
         )}
         {!loading && cancelled && (
-          <p className="text-yellow-400 text-sm">Suche abgebrochen.</p>
+          <p className="text-yellow-400 text-sm">{t("join_leave.cancelled")}</p>
         )}
         {error && (
           <p className="text-[#e05555] text-sm bg-[#1e1e2e] rounded-lg px-3 py-2">
@@ -528,7 +528,7 @@ export function JoinLeaveView({
         <div className="bg-[#2a2a3e] rounded-xl p-4 overflow-auto">
           <div className="flex items-center justify-between gap-3 mb-3">
             <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-              Ergebnis ({result.events.length} Treffer)
+              {t("join_leave.result_header", { count: result.events.length })}
             </p>
             <div className="flex items-center gap-3">
               {exportError && (
@@ -547,18 +547,18 @@ export function JoinLeaveView({
             </div>
           </div>
           {result.events.length === 0 ? (
-            <p className="text-[#888aaa] text-sm">Keine Ein-/Austrittsereignisse gefunden.</p>
+            <p className="text-[#888aaa] text-sm">{t("join_leave.no_events")}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[#888aaa] border-b border-[#3a3a5a]">
-                  <th className="px-3 py-2 text-left">Ereignis</th>
-                  <th className="px-3 py-2 text-left">Datum</th>
-                  <th className="px-3 py-2 text-left">Uhrzeit</th>
-                  <th className="px-3 py-2 text-left">Betroffener User</th>
-                  <th className="px-3 py-2 text-left">Ausführender Account/Bot</th>
-                  <th className="px-3 py-2 text-right">Chat-ID</th>
-                  <th className="px-3 py-2 text-right">Message-ID</th>
+                  <th className="px-3 py-2 text-left">{t("join_leave.col_event")}</th>
+                  <th className="px-3 py-2 text-left">{t("join_leave.col_date")}</th>
+                  <th className="px-3 py-2 text-left">{t("join_leave.col_time")}</th>
+                  <th className="px-3 py-2 text-left">{t("join_leave.col_affected")}</th>
+                  <th className="px-3 py-2 text-left">{t("join_leave.col_actor")}</th>
+                  <th className="px-3 py-2 text-right">{t("join_leave.col_chat_id")}</th>
+                  <th className="px-3 py-2 text-right">{t("join_leave.col_message_id")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -567,8 +567,8 @@ export function JoinLeaveView({
                     key={`${event.chat_id}-${event.message_id}-${event.event_type}`}
                     className="border-b border-[#242438] last:border-0"
                   >
-                    <td className="px-3 py-2 text-[#e0e0f0]">{joinLeaveLabels[event.event_type]}</td>
-                    <td className="px-3 py-2 text-[#e0e0f0]">{fmtDate(event.date).split(" ")[0]}</td>
+                    <td className="px-3 py-2 text-[#e0e0f0]">{t(`join_leave.event_${event.event_type}`)}</td>
+                    <td className="px-3 py-2 text-[#e0e0f0]">{fmtDateOnly(event.date)}</td>
                     <td className="px-3 py-2 text-[#e0e0f0] tabular-nums">{event.time}</td>
                     <td className="px-3 py-2 text-[#e0e0f0]">
                       {event.affected_user}
@@ -682,10 +682,10 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
     invoke<ChatMember[]>("load_chat_members", { chatId: id })
       .then(setMembers)
       .catch((e) => {
-        if (String(e).includes("Abgebrochen")) {
+        if (isCancelled(e)) {
           setMembersCancelled(true);
         } else {
-          console.error("Mitglieder laden fehlgeschlagen:", e);
+          console.error("Loading members failed:", translateBackend(e));
           setMembersUnavailable(true);
         }
       })
@@ -780,11 +780,10 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
       });
       setResult(res);
     } catch (e) {
-      const msg = String(e);
-      if (msg.includes("Abgebrochen")) {
+      if (isCancelled(e)) {
         setCancelled(true);
       } else {
-        setError(msg);
+        setError(translateBackend(e));
       }
     } finally {
       setLoading(false);
@@ -823,7 +822,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
   if (!chatId) {
     return (
       <div className="flex-1 bg-[#1e1e2e] rounded-xl flex items-center justify-center min-h-[8rem]">
-        <p className="text-[#3a3a5a] text-sm">Bitte zuerst einen Chat auflösen</p>
+        <p className="text-[#3a3a5a] text-sm">{t("common.resolve_chat_first")}</p>
       </div>
     );
   }
@@ -834,7 +833,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
       {/* ── Search input card ─────────────────────────────────────────────── */}
       <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-3">
         <label className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-          Username
+          {t("common.username")}
         </label>
 
         {membersLoading && (
@@ -847,7 +846,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
               onClick={handleCancelMembers}
               className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-xs font-semibold px-2 py-0.5 rounded transition-colors whitespace-nowrap"
             >
-              ✕ Abbrechen
+              ✕ {t("common.cancel")}
             </button>
           </div>
         )}
@@ -855,22 +854,21 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
         {membersCancelled && !membersLoading && (
           <div className="flex items-center gap-3">
             <p className="text-amber-400 text-xs">
-              Laden der Mitgliederliste abgebrochen. Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
+              {t("members.cancelled_hint")}
             </p>
             <button
               type="button"
               onClick={() => chatId && loadMembers(chatId)}
               className="text-[#888aaa] hover:text-[#e0e0f0] text-xs px-2 py-0.5 rounded border border-[#3a3a5a] hover:border-[#7c6af7] transition-colors whitespace-nowrap"
             >
-              Erneut laden
+              {t("common.reload")}
             </button>
           </div>
         )}
 
         {membersUnavailable && !membersLoading && (
           <p className="text-amber-400 text-xs">
-            Mitgliederliste nicht verfügbar (dafür sind in diesem Chat Admin-Rechte nötig).
-            Die Suche funktioniert trotzdem, bitte den @username direkt eingeben.
+            {t("members.unavailable_hint")}
           </p>
         )}
 
@@ -907,7 +905,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                 onClick={handleCancel}
                 className="text-[#e05555] border border-[#e05555] hover:bg-[#e05555] hover:text-white text-sm font-semibold px-3 py-2 rounded-lg transition-colors whitespace-nowrap"
               >
-                ✕ Abbrechen
+                ✕ {t("common.cancel")}
               </button>
             )}
           </div>
@@ -954,7 +952,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
           {showDropdown && (
             <div className="absolute top-full left-0 right-14 mt-1 bg-[#2a2a3e] border border-[#3a3e5e] rounded-lg shadow-lg z-10 overflow-hidden">
               <div className="px-3 py-1.5 border-b border-[#3a3a5a]">
-                <span className="text-[#888aaa] text-xs">🔍 „{query}"</span>
+                <span className="text-[#888aaa] text-xs">🔍 "{query}"</span>
               </div>
               {filteredMembers.map((m, i) => (
                 <button
@@ -982,21 +980,21 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
         {/* Membership hints */}
         {isExactSearch && memberMatch && !selectedMember && (
           <p className="text-green-400 text-xs">
-            ✓ Mitglied gefunden: {memberMatch.name}
+            ✓ {t("common.member_found", { name: memberMatch.name })}
           </p>
         )}
         {/* Loading / status for manual searches (no member card) */}
         {!selectedMember && loading && (
           <div className="flex items-center gap-3">
-            <p className="text-[#888aaa] text-sm animate-pulse">Durchsuche Nachrichten…</p>
+            <p className="text-[#888aaa] text-sm animate-pulse">{t("first_mention.searching_messages")}</p>
             <span className="text-yellow-400 text-xs tabular-nums font-mono">⏱ {formatted}</span>
           </div>
         )}
         {!selectedMember && !loading && cancelled && (
-          <span className="text-yellow-400 text-xs">⚠ Suche abgebrochen {finalDuration ? `(nach ${finalDuration})` : ""}</span>
+          <span className="text-yellow-400 text-xs">⚠ {finalDuration ? t("first_mention.cancelled_after", { duration: finalDuration }) : t("first_mention.cancelled")}</span>
         )}
         {!selectedMember && !loading && finalDuration && !error && !cancelled && (
-          <span className="text-green-400 text-xs">✓ Abgeschlossen in {finalDuration}</span>
+          <span className="text-green-400 text-xs">✓ {t("first_mention.done_in", { duration: finalDuration })}</span>
         )}
         {!selectedMember && error && (
           <p className="text-[#e05555] text-sm bg-[#1e1e2e] rounded-lg px-3 py-2">
@@ -1018,7 +1016,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
           <Divider />
 
           {/* Joined date */}
-          <Row label="Letzter Beitritt" value={fmtDate(selectedMember.joined_at)} />
+          <Row label={t("first_mention.last_join")} value={fmtDate(selectedMember.joined_at)} />
 
           {/* Search button – visible only when idle (no result, not loading) */}
           {!loading && !result && !error && selectedMember.username && (
@@ -1028,30 +1026,30 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                 onClick={handleSearch}
                 className="self-start bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
               >
-                🔍 Frühere Aktivität suchen
+                🔍 {t("first_mention.search_earlier")}
               </button>
             </>
           )}
           {!loading && !result && !error && !selectedMember.username && (
             <p className="text-[#888aaa] text-xs pt-1">
-              Kein @username – Suche nicht möglich
+              {t("first_mention.no_username")}
             </p>
           )}
 
           {/* Loading */}
           {loading && (
             <div className="flex items-center gap-3 pt-1">
-              <p className="text-[#888aaa] text-sm animate-pulse">Durchsuche Nachrichten…</p>
+              <p className="text-[#888aaa] text-sm animate-pulse">{t("first_mention.searching_messages")}</p>
               <span className="text-yellow-400 text-xs tabular-nums font-mono">⏱ {formatted}</span>
             </div>
           )}
           {!loading && cancelled && (
-            <span className="text-yellow-400 text-xs pt-1">⚠ Suche abgebrochen {finalDuration ? `(nach ${finalDuration})` : ""}</span>
+            <span className="text-yellow-400 text-xs pt-1">⚠ {finalDuration ? t("first_mention.cancelled_after", { duration: finalDuration }) : t("first_mention.cancelled")}</span>
           )}
           {!loading && finalDuration && !error && !cancelled && (result ? (
-            <span className="text-green-400 text-xs">✓ Abgeschlossen in {finalDuration}</span>
+            <span className="text-green-400 text-xs">✓ {t("first_mention.done_in", { duration: finalDuration })}</span>
           ) : (
-            <span className="text-green-400 text-xs pt-1">✓ Abgeschlossen in {finalDuration}</span>
+            <span className="text-green-400 text-xs pt-1">✓ {t("first_mention.done_in", { duration: finalDuration })}</span>
           ))}
 
           {/* Error */}
@@ -1067,12 +1065,12 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
               <Divider />
               {!result.first_seen ? (
                 <p className="text-[#888aaa] text-sm">
-                  Keine Aktivität im Chatverlauf gefunden.
+                  {t("first_mention.no_activity_history")}
                 </p>
               ) : (
                 <>
-                  <Row label="Erste eigene Nachricht" value={fmtDate(result.first_own_message)} />
-                  <Row label="Erste Erwähnung" value={fmtDate(result.first_mention)} />
+                  <Row label={t("first_mention.first_own_message")} value={fmtDate(result.first_own_message)} />
+                  <Row label={t("first_mention.first_mention")} value={fmtDate(result.first_mention)} />
                   <Row label={t("first_mention.joined_at")} value={fmtDate(result.joined_at)} />
                   {result.joined_at_is_rejoin && (
                     <p className="text-yellow-500 text-xs italic">
@@ -1082,7 +1080,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                   <Divider />
 
                   <Row
-                    label={result.joined_at_is_rejoin ? "⚠️ Frühester Nachweis" : "Frühester Nachweis"}
+                    label={result.joined_at_is_rejoin ? `⚠️ ${t("first_mention.earliest")}` : t("first_mention.earliest")}
                     value={fmtDate(result.first_seen)}
                     valueClass={result.joined_at_is_rejoin ? "text-orange-400 font-bold" : "text-[#7c6af7] font-bold"}
                   />
@@ -1097,10 +1095,10 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                     <>
                       <Divider />
                       <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-                        Kontext
+                        {t("first_mention.context")}
                       </p>
                       <p className="text-[#888aaa] text-sm italic leading-relaxed bg-[#1e1e2e] rounded-lg px-3 py-2">
-                        „{result.message_context}"
+                        "{result.message_context}"
                       </p>
                     </>
                   )}
@@ -1109,7 +1107,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                       onClick={() => open(result.message_link!)}
                       className="mt-1 self-start bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
                     >
-                      🔗 Zur Nachricht
+                      🔗 {t("first_mention.open_message")}
                     </button>
                   )}
                 </>
@@ -1123,15 +1121,15 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
       {!selectedMember && result && (
         <div className="bg-[#2a2a3e] rounded-xl p-4 flex flex-col gap-2">
           <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-            Erste Aktivität für @{normalizedUsername}
+            {t("first_mention.result_header", { username: normalizedUsername })}
           </p>
           {!result.first_seen ? (
-            <p className="text-[#3a3a5a] text-sm pt-1">Keine Aktivität gefunden.</p>
+            <p className="text-[#3a3a5a] text-sm pt-1">{t("first_mention.no_activity")}</p>
           ) : (
             <>
               <Divider />
-              <Row label="Erste eigene Nachricht" value={fmtDate(result.first_own_message)} />
-              <Row label="Erste Erwähnung" value={fmtDate(result.first_mention)} />
+              <Row label={t("first_mention.first_own_message")} value={fmtDate(result.first_own_message)} />
+              <Row label={t("first_mention.first_mention")} value={fmtDate(result.first_mention)} />
               <Row label={t("first_mention.joined_at")} value={fmtDate(result.joined_at)} />
               {result.joined_at_is_rejoin && (
                 <p className="text-yellow-500 text-xs italic">
@@ -1140,7 +1138,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
               )}
               <Divider />
               <Row
-                label="Frühester Nachweis"
+                label={t("first_mention.earliest")}
                 value={fmtDate(result.first_seen)}
                 valueClass="text-[#7c6af7] font-bold"
               />
@@ -1154,10 +1152,10 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                 <>
                   <Divider />
                   <p className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-                    Kontext
+                    {t("first_mention.context")}
                   </p>
                   <p className="text-[#888aaa] text-sm italic leading-relaxed bg-[#1e1e2e] rounded-lg px-3 py-2">
-                    „{result.message_context}"
+                    "{result.message_context}"
                   </p>
                 </>
               )}
@@ -1166,7 +1164,7 @@ export default function FirstMentionView({ chatId, chatUsername }: Props) {
                   onClick={() => open(result.message_link!)}
                   className="mt-2 self-start bg-[#1e1e2e] hover:bg-[#3a3a5e] border border-[#3a3a5a] text-[#e0e0f0] text-sm py-1.5 px-3 rounded-lg transition-colors flex items-center gap-2"
                 >
-                  🔗 Zur Nachricht
+                  🔗 {t("first_mention.open_message")}
                 </button>
               )}
             </>

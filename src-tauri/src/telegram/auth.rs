@@ -45,19 +45,29 @@ fn global() -> &'static Mutex<Option<TelegramState>> {
 
 // ── Error and result types ────────────────────────────────────────────────────
 
-#[derive(thiserror::Error, Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub enum AuthError {
-    #[error("Verbindungsfehler: {0}")]
     Connection(String),
-    #[error("Falscher Code")]
     WrongCode,
-    #[error("Falsches Passwort")]
     WrongPassword,
-    #[error("Session ungültig")]
     SessionInvalid,
-    #[error("Unbekannter Fehler: {0}")]
     Unknown(String),
 }
+
+impl std::fmt::Display for AuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Connection(d) => tr!("backend.err.connection", detail = d),
+            Self::WrongCode => tr!("backend.err.wrong_code"),
+            Self::WrongPassword => tr!("backend.err.wrong_password"),
+            Self::SessionInvalid => tr!("backend.err.session_invalid"),
+            Self::Unknown(d) => tr!("backend.err.unknown", detail = d),
+        };
+        f.write_str(&s)
+    }
+}
+
+impl std::error::Error for AuthError {}
 
 #[derive(serde::Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -144,7 +154,7 @@ pub async fn submit_code(code: &str) -> Result<ConnectResult, AuthError> {
             };
             token
         }
-        _ => return Err(AuthError::Unknown("Kein Code angefordert".into())),
+        _ => return Err(AuthError::Unknown(tr!("backend.err.no_code_requested"))),
     };
 
     match state.client.sign_in(&token, code).await {
@@ -182,7 +192,7 @@ pub async fn submit_password(password: &str) -> Result<(), AuthError> {
         AuthStage::PasswordRequired { token } => token,
         other => {
             state.stage = other;
-            return Err(AuthError::Unknown("Kein Passwort angefordert".into()));
+            return Err(AuthError::Unknown(tr!("backend.err.no_password_requested")));
         }
     };
 

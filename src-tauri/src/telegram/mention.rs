@@ -120,7 +120,7 @@ pub async fn load_chat_members(
 
         // Log every 1 000 members
         if total > 0 && total % 1000 == 0 {
-            let _ = app.emit("log", format!("{} Mitglieder geladen…", total));
+            let _ = app.emit("log", tr!("backend.log.members_loaded_progress", count = total));
         }
 
         if batch_count < limit as usize {
@@ -131,7 +131,7 @@ pub async fn load_chat_members(
 
     let _ = app.emit(
         "log",
-        format!("{} Mitglieder insgesamt geladen.", members.len()),
+        tr!("backend.log.members_loaded_total", count = members.len()),
     );
 
     Ok(members)
@@ -152,7 +152,7 @@ pub async fn find_first_mention(
 
     // Resolve chat peer
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id).ok_or_else(|| format!("Ungültige Chat-ID: {}", chat_id))?,
+        id: PeerId::channel(chat_id).ok_or_else(|| tr!("backend.err.invalid_chat_id", id = chat_id))?,
         auth: PeerAuth::default(),
     };
     let peer = client
@@ -162,22 +162,22 @@ pub async fn find_first_mention(
     let peer_ref = peer
         .to_ref()
         .await
-        .ok_or("Could not obtain peer reference")?;
+        .ok_or_else(|| tr!("backend.err.no_peer_reference"))?;
 
     // ── Resolve user and extract InputPeer + user_id ──────────────────────────
     let user_peer = client
         .resolve_username(&username)
         .await
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Benutzer @{} nicht gefunden", username))?;
+        .ok_or_else(|| tr!("backend.err.username_not_found", username = username))?;
     let user_peer_ref = user_peer
         .to_ref()
         .await
-        .ok_or("Could not obtain user peer reference")?;
+        .ok_or_else(|| tr!("backend.err.no_peer_reference"))?;
     let user_input_peer = tl::enums::InputPeer::from(user_peer_ref);
     let user_id: i64 = match &user_input_peer {
         tl::enums::InputPeer::User(u) => u.user_id,
-        _ => return Err(format!("@{} ist kein Benutzer", username)),
+        _ => return Err(tr!("backend.err.not_a_user", username = username)),
     };
 
     // ── Get participant join date via GetParticipant ───────────────────────────
@@ -221,12 +221,12 @@ pub async fn find_first_mention(
         find_oldest_own_message(client, peer_ref.clone(), user_input_peer.clone(), &username, app).await?;
 
     // ── Search 2: mentions via server-side text search ────────────────────────
-    let _ = app.emit("log", format!("Suche Erwähnungen von @{}…", username));
+    let _ = app.emit("log", tr!("backend.log.searching_mentions", username = username));
     let (first_mention, message_context, message_link) =
         find_oldest_mention(client, peer_ref, &chat_username, chat_id, &username, user_id, app)
             .await?;
 
-    let _ = app.emit("log", "Suche abgeschlossen.".to_string());
+    let _ = app.emit("log", tr!("backend.log.search_done"));
 
     let mut candidates: Vec<DateTime<Utc>> = vec![];
     if let Some(d) = first_own_message { candidates.push(d); }
@@ -303,7 +303,7 @@ pub async fn find_join_leave_events(
     }
 
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id).ok_or_else(|| format!("Ungültige Chat-ID: {}", chat_id))?,
+        id: PeerId::channel(chat_id).ok_or_else(|| tr!("backend.err.invalid_chat_id", id = chat_id))?,
         auth: PeerAuth::default(),
     };
     let peer = client
@@ -313,12 +313,12 @@ pub async fn find_join_leave_events(
     let peer_ref = peer
         .to_ref()
         .await
-        .ok_or("Could not obtain peer reference")?;
+        .ok_or_else(|| tr!("backend.err.no_peer_reference"))?;
 
-    let _ = app.emit("log", "Starte Ein-/Austritt-Suche…".to_string());
+    let _ = app.emit("log", tr!("backend.log.join_leave_start"));
     let _ = app.emit(
         "log",
-        format!("Zeitraum: {}.", format_date_range(from_dt, to_dt)),
+        tr!("backend.log.period", range = format_date_range(from_dt, to_dt)),
     );
 
     match find_join_leave_events_admin_log(
@@ -337,10 +337,10 @@ pub async fn find_join_leave_events(
         Ok(result) if !result.events.is_empty() => {
             let _ = app.emit(
                 "log",
-                format!(
-                    "Ein-/Austritt-Suche abgeschlossen. {} Treffer gefunden. Dauer: {}.",
-                    result.events.len(),
-                    format_elapsed(started_at)
+                tr!(
+                    "backend.log.join_leave_done",
+                    count = result.events.len(),
+                    duration = format_elapsed(started_at)
                 ),
             );
             return Ok(result);
@@ -348,20 +348,20 @@ pub async fn find_join_leave_events(
         Ok(_) => {
             let _ = app.emit(
                 "log",
-                "Keine Treffer im Admin-Log. Suche in Chat-Historie…".to_string(),
+                tr!("backend.log.admin_log_empty"),
             );
         }
-        Err(e) if e.contains("Abgebrochen") => {
+        Err(e) if crate::i18n::is_cancelled(&e) => {
             let _ = app.emit(
                 "log",
-                format!("Ein-/Austritt-Suche abgebrochen. Dauer: {}.", format_elapsed(started_at)),
+                tr!("backend.log.join_leave_cancelled", duration = format_elapsed(started_at)),
             );
             return Err(e);
         }
         Err(e) => {
             let _ = app.emit(
                 "log",
-                format!("Admin-Log nicht verfügbar ({}). Suche in Chat-Historie…", e),
+                tr!("backend.log.admin_log_unavailable", error = e),
             );
         }
     }
@@ -382,9 +382,9 @@ pub async fn find_join_leave_events(
             CANCEL.store(false, Ordering::Relaxed);
             let _ = app.emit(
                 "log",
-                format!("Ein-/Austritt-Suche abgebrochen. Dauer: {}.", format_elapsed(started_at)),
+                tr!("backend.log.join_leave_cancelled", duration = format_elapsed(started_at)),
             );
-            return Err("Abgebrochen".into());
+            return Err(crate::i18n::cancelled());
         }
 
         match msg_iter.next().await {
@@ -395,10 +395,10 @@ pub async fn find_join_leave_events(
                     if msg_date < from {
                         let _ = app.emit(
                             "log",
-                            format!(
-                                "Datumsgrenze erreicht: {} Historieneinträge geprüft, davon {} Service-Messages.",
-                                scanned,
-                                service_scanned
+                            tr!(
+                                "backend.log.history_date_limit",
+                                scanned = scanned,
+                                service = service_scanned
                             ),
                         );
                         break;
@@ -412,10 +412,10 @@ pub async fn find_join_leave_events(
                 if scanned % 500 == 0 {
                     let _ = app.emit(
                         "log",
-                        format!(
-                            "Ein-/Austritt-Suche: {} Historieneinträge geprüft, aktuelles Datum: {}…",
-                            scanned,
-                            msg_date.format("%d.%m.%Y")
+                        tr!(
+                            "backend.log.history_progress",
+                            scanned = scanned,
+                            date = msg_date.format("%d.%m.%Y").to_string()
                         ),
                     );
                 }
@@ -487,7 +487,7 @@ pub async fn find_join_leave_events(
                             sender_name.unwrap_or_else(|| {
                                 affected_id
                                     .map(|id| format!("User {}", id))
-                                    .unwrap_or_else(|| "Unbekannt".to_string())
+                                    .unwrap_or_else(|| "?".to_string())
                             }),
                             Some(format!("User {}", action.inviter_id)),
                             Some(action.inviter_id),
@@ -519,7 +519,7 @@ pub async fn find_join_leave_events(
                             sender_name.unwrap_or_else(|| {
                                 affected_id
                                     .map(|id| format!("User {}", id))
-                                    .unwrap_or_else(|| "Unbekannt".to_string())
+                                    .unwrap_or_else(|| "?".to_string())
                             }),
                             None,
                             None,
@@ -571,12 +571,12 @@ pub async fn find_join_leave_events(
 
     let _ = app.emit(
         "log",
-        format!(
-            "Ein-/Austritt-Suche abgeschlossen. {} Historieneinträge geprüft, davon {} Service-Messages, {} Treffer gefunden. Dauer: {}.",
-            scanned,
-            service_scanned,
-            events.len(),
-            format_elapsed(started_at)
+        tr!(
+            "backend.log.history_done",
+            scanned = scanned,
+            service = service_scanned,
+            count = events.len(),
+            duration = format_elapsed(started_at)
         ),
     );
 
@@ -597,7 +597,7 @@ async fn find_join_leave_events_admin_log(
     let input_channel = resolve_input_channel(client, chat_id).await?;
     let _ = app.emit(
         "log",
-        "Prüfe Ein-/Austritt-Ereignisse über Telegram-Admin-Log…".to_string(),
+        tr!("backend.log.admin_log_start"),
     );
 
     let mut max_id = 0i64;
@@ -607,7 +607,7 @@ async fn find_join_leave_events_admin_log(
     loop {
         if CANCEL.load(Ordering::Relaxed) {
             CANCEL.store(false, Ordering::Relaxed);
-            return Err("Abgebrochen".into());
+            return Err(crate::i18n::cancelled());
         }
 
         let result = client
@@ -638,7 +638,7 @@ async fn find_join_leave_events_admin_log(
         for raw_event in &data.events {
             if CANCEL.load(Ordering::Relaxed) {
                 CANCEL.store(false, Ordering::Relaxed);
-                return Err("Abgebrochen".into());
+                return Err(crate::i18n::cancelled());
             }
 
             let event = match raw_event {
@@ -665,10 +665,10 @@ async fn find_join_leave_events_admin_log(
             if scanned % 500 == 0 {
                 let _ = app.emit(
                     "log",
-                    format!(
-                        "Ein-/Austritt-Suche: {} Admin-Log-Ereignisse geprüft, aktuelles Datum: {}…",
-                        scanned,
-                        event_dt.format("%d.%m.%Y")
+                    tr!(
+                        "backend.log.admin_log_progress",
+                        scanned = scanned,
+                        date = event_dt.format("%d.%m.%Y").to_string()
                     ),
                 );
             }
@@ -691,10 +691,7 @@ async fn find_join_leave_events_admin_log(
             if reached_from_date {
                 let _ = app.emit(
                     "log",
-                    format!(
-                        "Datumsgrenze im Admin-Log erreicht: {} Ereignisse geprüft.",
-                        scanned
-                    ),
+                    tr!("backend.log.admin_log_date_limit", scanned = scanned),
                 );
             }
             break;
@@ -703,7 +700,7 @@ async fn find_join_leave_events_admin_log(
     }
 
     if scanned == 0 {
-        return Err("keine Admin-Log-Ereignisse geliefert".to_string());
+        return Err(tr!("backend.err.admin_log_no_events"));
     }
 
     Ok(JoinLeaveSearchResult { events })
@@ -719,7 +716,7 @@ async fn find_oldest_own_message(
     username: &str,
     app: &tauri::AppHandle,
 ) -> Result<Option<DateTime<Utc>>, String> {
-    let _ = app.emit("log", format!("Starte Nachrichtensuche für @{}…", username));
+    let _ = app.emit("log", tr!("backend.log.own_messages_start", username = username));
 
     let chat_input_peer = tl::enums::InputPeer::from(chat_peer_ref);
     let mut oldest: Option<DateTime<Utc>> = None;
@@ -729,7 +726,7 @@ async fn find_oldest_own_message(
     loop {
         if CANCEL.load(Ordering::Relaxed) {
             CANCEL.store(false, Ordering::Relaxed);
-            return Err("Abgebrochen".into());
+            return Err(crate::i18n::cancelled());
         }
 
         let result = client
@@ -780,9 +777,10 @@ async fn find_oldest_own_message(
                         .unwrap_or_default();
                     let _ = app.emit(
                         "log",
-                        format!(
-                            "Geprüft: {} Nachrichten, aktuelles Datum: {}",
-                            count, date_str,
+                        tr!(
+                            "backend.log.own_messages_progress",
+                            count = count,
+                            date = date_str,
                         ),
                     );
                 }
@@ -797,7 +795,7 @@ async fn find_oldest_own_message(
 
     let _ = app.emit(
         "log",
-        format!("Suche beendet. {} eigene Nachrichten gefunden.", count),
+        tr!("backend.log.own_messages_done", count = count),
     );
 
     Ok(oldest)
@@ -827,7 +825,7 @@ async fn find_oldest_mention(
     loop {
         if CANCEL.load(Ordering::Relaxed) {
             CANCEL.store(false, Ordering::Relaxed);
-            return Err("Abgebrochen".into());
+            return Err(crate::i18n::cancelled());
         }
 
         match iter.next().await {
@@ -854,7 +852,7 @@ async fn find_oldest_mention(
 
                 total += 1;
                 if total % 500 == 0 {
-                    let _ = app.emit("log", format!("Erwähnungen: {} gefunden…", total));
+                    let _ = app.emit("log", tr!("backend.log.mentions_progress", count = total));
                 }
             }
             Ok(None) => break,
@@ -888,13 +886,13 @@ fn parse_search_date(
     };
     let date = NaiveDate::parse_from_str(value, "%d.%m.%Y")
         .or_else(|_| NaiveDate::parse_from_str(value, "%Y-%m-%d"))
-        .map_err(|_| format!("Ungültiges Datum: {}. Erwartet: TT.MM.JJJJ", value))?;
+        .map_err(|_| tr!("backend.err.invalid_date_expected", value = value))?;
     let time = if end_of_day {
         date.and_hms_opt(23, 59, 59)
     } else {
         date.and_hms_opt(0, 0, 0)
     }
-    .ok_or_else(|| format!("Ungültiges Datum: {}", value))?;
+    .ok_or_else(|| tr!("backend.err.invalid_date", value = value))?;
     Ok(Some(time.and_utc()))
 }
 
@@ -913,11 +911,11 @@ fn format_elapsed(started_at: Instant) -> String {
 fn format_date_range(from_dt: Option<DateTime<Utc>>, to_dt: Option<DateTime<Utc>>) -> String {
     let from = from_dt
         .map(|dt| dt.format("%d.%m.%Y").to_string())
-        .unwrap_or_else(|| "kein Zurück-bis-Datum".to_string());
+        .unwrap_or_else(|| tr!("backend.log.no_from_date"));
     let to = to_dt
         .map(|dt| dt.format("%d.%m.%Y").to_string())
-        .unwrap_or_else(|| "Heute".to_string());
-    format!("{} bis {}", from, to)
+        .unwrap_or_else(|| tr!("backend.log.today"));
+    tr!("backend.log.date_range", from = from, to = to)
 }
 
 fn target_matches(
@@ -1198,7 +1196,7 @@ async fn resolve_input_channel(
     chat_id: i64,
 ) -> Result<tl::enums::InputChannel, String> {
     let init_ref = PeerRef {
-        id: PeerId::channel(chat_id).ok_or_else(|| format!("Ungültige Chat-ID: {}", chat_id))?,
+        id: PeerId::channel(chat_id).ok_or_else(|| tr!("backend.err.invalid_chat_id", id = chat_id))?,
         auth: PeerAuth::default(),
     };
     let peer = client
@@ -1208,7 +1206,7 @@ async fn resolve_input_channel(
     let peer_ref = peer
         .to_ref()
         .await
-        .ok_or("Could not obtain peer reference")?;
+        .ok_or_else(|| tr!("backend.err.no_peer_reference"))?;
     let input_peer = tl::enums::InputPeer::from(peer_ref);
     match input_peer {
         tl::enums::InputPeer::Channel(c) => {
@@ -1217,7 +1215,7 @@ async fn resolve_input_channel(
                 access_hash: c.access_hash,
             }))
         }
-        _ => Err("Mitgliederliste ist nur für Channels und Supergroups verfügbar".to_string()),
+        _ => Err(tr!("backend.err.channels_only")),
     }
 }
 

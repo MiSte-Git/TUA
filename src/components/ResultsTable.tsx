@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { AnalysisResult, MemberActivity, UserOnlineStatus } from "../types";
 import Tooltip from "./Tooltip";
+import { fmtNum, fmtDate as fmtDay, fmtDateTime as fmtDayTime } from "../utils/format";
+import { translateBackend } from "../utils/backendMessage";
 
 interface Props {
   result: AnalysisResult | null;
@@ -21,20 +23,16 @@ type SortKey = keyof Pick<MemberActivity, "name" | "joined_date" | "message_coun
 type SortDir = "asc" | "desc";
 
 function fmt(n: number) {
-  return n.toLocaleString("de-CH");
+  return fmtNum(n);
 }
 
 function fmtJoinDate(ts: number | null): string {
   if (ts === null) return "–";
-  const d = new Date(ts * 1000);
-  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+  return fmtDay(new Date(ts * 1000));
 }
 
 function fmtDateTime(ts: number): string {
-  const d = new Date(ts * 1000);
-  const date = `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
-  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return `${date} ${time}`;
+  return fmtDayTime(new Date(ts * 1000));
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -70,7 +68,7 @@ function ResultsTable({
       })
       .catch((e) => {
         setStatuses((prev) =>
-          new Map(prev).set(userId, { loading: false, error: String(e) })
+          new Map(prev).set(userId, { loading: false, error: translateBackend(e) })
         );
       });
   }

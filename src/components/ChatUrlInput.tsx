@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { ChatInfo } from "../types";
+import { isCancelled, translateBackend } from "../utils/backendMessage";
+import { fmtNum } from "../utils/format";
 
 interface Props {
   onChatResolved: (chat: ChatInfo, url: string) => void;
@@ -62,8 +64,7 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
       onChatResolved(chat, targetUrl);
       setHistory((prev) => saveToHistory({ url: targetUrl, title: chat.title }, prev));
     } catch (e) {
-      const msg = String(e);
-      if (!msg.includes("Abgebrochen")) setError(msg);
+      if (!isCancelled(e)) setError(translateBackend(e));
     } finally {
       setLoading(false);
     }
@@ -110,7 +111,7 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <label className="text-[#888aaa] text-xs font-medium uppercase tracking-wide">
-        Chat-URL
+        {t("chat.url_label")}
       </label>
 
       <div className="flex gap-2">
@@ -182,11 +183,11 @@ export default function ChatUrlInput({ onChatResolved, disabled }: Props) {
           <div className="text-right">
             {resolved.member_count !== null ? (
               <p className="text-[#7c6af7] text-sm font-semibold">
-                {t("chat.member_count", { count: resolved.member_count.toLocaleString("de-CH") })}
+                {t("chat.member_count", { count: fmtNum(resolved.member_count) })}
               </p>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-[#888aaa] text-xs">Mitglieder:</span>
+                <span className="text-[#888aaa] text-xs">{t("chat.members_manual")}</span>
                 <input
                   type="number"
                   placeholder="?"

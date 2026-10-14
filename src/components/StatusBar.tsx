@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useElapsedTimer } from "../hooks/useElapsedTimer";
+import { fmtNum } from "../utils/format";
 
 interface Props {
   connected: boolean;
@@ -12,7 +13,7 @@ interface Props {
 }
 
 function fmt(n: number) {
-  return n.toLocaleString("de-CH");
+  return fmtNum(n);
 }
 
 export default function StatusBar({ connected, progress, scannedMessages, analyzing = false, version, onAbout }: Props) {
@@ -57,7 +58,7 @@ export default function StatusBar({ connected, progress, scannedMessages, analyz
 
       {/* Completion duration after analysis finishes */}
       {!analyzing && finalDuration && scannedMessages === 0 && (
-        <span className="text-green-400 text-xs">✓ Abgeschlossen in {finalDuration}</span>
+        <span className="text-green-400 text-xs">✓ {t("first_mention.done_in", { duration: finalDuration })}</span>
       )}
 
       {/* Progress bar (visible only when progress > 0) */}

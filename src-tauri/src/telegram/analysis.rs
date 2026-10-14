@@ -101,19 +101,29 @@ pub struct UserOnlineStatus {
     pub was_online: Option<i64>,
 }
 
-#[derive(thiserror::Error, Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub enum AnalysisError {
-    #[error("Not authorized")]
     NotAuthorized,
-    #[error("Chat not found: {0}")]
     ChatNotFound(String),
-    #[error("Invalid URL: {0}")]
     InvalidUrl(String),
-    #[error("Telegram error: {0}")]
     Telegram(String),
-    #[error("Abgebrochen")]
     Cancelled,
 }
+
+impl std::fmt::Display for AnalysisError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::NotAuthorized => tr!("backend.err.not_authorized"),
+            Self::ChatNotFound(d) => tr!("backend.err.chat_not_found", detail = d),
+            Self::InvalidUrl(d) => tr!("backend.err.invalid_input", detail = d),
+            Self::Telegram(d) => tr!("backend.err.telegram", detail = d),
+            Self::Cancelled => crate::i18n::cancelled(),
+        };
+        f.write_str(&s)
+    }
+}
+
+impl std::error::Error for AnalysisError {}
 
 // ── URL parsing ───────────────────────────────────────────────────────────────
 
@@ -139,17 +149,14 @@ fn parse_chat_identifier(url: &str) -> Result<ChatIdentifier, AnalysisError> {
     if let Some(rest) = path.strip_prefix("c/") {
         let id_str = rest.split('/').next().unwrap_or("");
         let id: i64 = id_str.parse().map_err(|_| {
-            AnalysisError::InvalidUrl(format!("Invalid channel ID in URL: {}", url))
+            AnalysisError::InvalidUrl(tr!("backend.err.invalid_channel_id_in_url", url = url))
         })?;
         return Ok(ChatIdentifier::ChannelId(id));
     }
 
     let username = path.split('/').next().unwrap_or("").trim();
     if username.is_empty() {
-        return Err(AnalysisError::InvalidUrl(format!(
-            "No username found in: {}",
-            url
-        )));
+        return Err(AnalysisError::InvalidUrl(tr!("backend.err.no_username_in_url", url = url)));
     }
     Ok(ChatIdentifier::Username(username.to_string()))
 }
@@ -158,7 +165,7 @@ fn parse_chat_identifier(url: &str) -> Result<ChatIdentifier, AnalysisError> {
 
 fn chat_info_from_peer(peer: &grammers_client::peer::Peer) -> Result<ChatInfo, AnalysisError> {
     use grammers_client::peer::Peer;
-    let invalid = || AnalysisError::Telegram("Ungültige Chat-ID vom Server erhalten".into());
+    let invalid = || AnalysisError::Telegram(tr!("backend.err.invalid_chat_id_from_server"));
     Ok(match peer {
         Peer::Channel(channel) => ChatInfo {
             id: channel.id().bare_id().ok_or_else(invalid)?,
@@ -217,7 +224,7 @@ pub async fn resolve_chat(chat_url: &str) -> Result<ChatInfo, AnalysisError> {
             .ok_or_else(|| AnalysisError::ChatNotFound(name))?,
         ChatIdentifier::ChannelId(id) => {
             let peer_ref = PeerRef {
-                id: PeerId::channel(id).ok_or_else(|| AnalysisError::InvalidUrl(format!("Ungültige Kanal-ID: {}", id)))?,
+                id: PeerId::channel(id).ok_or_else(|| AnalysisError::InvalidUrl(tr!("backend.err.invalid_channel_id", id = id)))?,
                 auth: PeerAuth::default(),
             };
             client
@@ -258,7 +265,7 @@ pub async fn run_analysis(
 
     let (peer, label) = match parse_chat_identifier(chat_url)? {
         ChatIdentifier::Username(name) => {
-            let _ = app.emit("log", format!("Kanal @{} wird aufgelöst…", name));
+            let _ = app.emit("log", tr!("backend.log.resolving_channel", name = format!("@{}", name)));
             let peer = client
                 .resolve_username(&name)
                 .await
@@ -267,16 +274,16 @@ pub async fn run_analysis(
             (peer, format!("@{}", name))
         }
         ChatIdentifier::ChannelId(id) => {
-            let _ = app.emit("log", format!("Kanal {} wird aufgelöst…", id));
+            let _ = app.emit("log", tr!("backend.log.resolving_channel", name = id.to_string()));
             let peer_ref = PeerRef {
-                id: PeerId::channel(id).ok_or_else(|| AnalysisError::InvalidUrl(format!("Ungültige Kanal-ID: {}", id)))?,
+                id: PeerId::channel(id).ok_or_else(|| AnalysisError::InvalidUrl(tr!("backend.err.invalid_channel_id", id = id)))?,
                 auth: PeerAuth::default(),
             };
             let peer = client
                 .resolve_peer(peer_ref)
                 .await
                 .map_err(|e| AnalysisError::Telegram(e.to_string()))?;
-            (peer, format!("channel {}", id))
+            (peer, tr!("backend.log.channel_label", id = id))
         }
     };
 
@@ -288,12 +295,12 @@ pub async fn run_analysis(
     let peer_ref: PeerRef = peer
         .to_ref()
         .await
-        .ok_or_else(|| AnalysisError::Telegram("Could not obtain peer reference".into()))?;
+        .ok_or_else(|| AnalysisError::Telegram(tr!("backend.err.no_peer_reference")))?;
 
     // Collect bots from participant list (independent of message time window)
     let all_bots = collect_bots(&client, &peer_ref).await.unwrap_or_default();
     if !all_bots.is_empty() {
-        let _ = app.emit("log", format!("{} Bots im Kanal gefunden.", all_bots.len()));
+        let _ = app.emit("log", tr!("backend.log.bots_found", count = all_bots.len()));
     }
 
     // Check own admin rights
@@ -305,11 +312,11 @@ pub async fn run_analysis(
     let fmt = |ts: i64| cache::ts_to_dt(ts).format("%Y-%m-%d %H:%M").to_string();
     let _ = app.emit(
         "log",
-        format!("Analyse für {} | Zeitraum: {} bis {}", label, fmt(from_ts), fmt(to_ts)),
+        tr!("backend.log.analysis_for", label = label, from = fmt(from_ts), to = fmt(to_ts)),
     );
 
     let cached = if force_full {
-        let _ = app.emit("log", "Komplett neu einlesen: gespeicherte Daten werden ersetzt.".to_string());
+        let _ = app.emit("log", tr!("backend.log.full_rescan"));
         None
     } else {
         cache::load(chat_info.id).filter(|c| c.include_reactions || !include_reactions)
@@ -319,16 +326,16 @@ pub async fn run_analysis(
         Some(mut c) => {
             let _ = app.emit(
                 "log",
-                format!(
-                    "Gespeicherte Daten gefunden: {} bis {} ({} Aktivitäten).",
-                    fmt(c.from_ts),
-                    fmt(c.to_ts),
-                    c.events.len()
+                tr!(
+                    "backend.log.cache_found",
+                    from = fmt(c.from_ts),
+                    to = fmt(c.to_ts),
+                    count = c.events.len()
                 ),
             );
             // Older history missing?
             if from_ts < c.from_ts {
-                let _ = app.emit("log", "Lade ältere Nachrichten nach…".to_string());
+                let _ = app.emit("log", tr!("backend.log.loading_older"));
                 let known = c.user_ids();
                 let res = scan_window(&client, &peer_ref, from_ts, c.from_ts - 1, c.include_reactions, &known, &app).await?;
                 let new_from = if res.complete { from_ts } else { res.oldest_ts.unwrap_or(c.from_ts) };
@@ -337,7 +344,7 @@ pub async fn run_analysis(
             }
             // New messages since the last scan?
             if to_ts > c.to_ts + 60 {
-                let _ = app.emit("log", "Lade neue Nachrichten seit dem letzten Stand…".to_string());
+                let _ = app.emit("log", tr!("backend.log.loading_newer"));
                 let known = c.user_ids();
                 let res = scan_window(&client, &peer_ref, c.to_ts + 1, to_ts, c.include_reactions, &known, &app).await?;
                 if res.complete {
@@ -346,12 +353,12 @@ pub async fn run_analysis(
                 } else {
                     let _ = app.emit(
                         "log",
-                        "Warnung: Neue Nachrichten konnten nicht vollständig geladen werden. Es werden die gespeicherten Daten angezeigt.".to_string(),
+                        tr!("backend.log.newer_incomplete"),
                     );
                 }
             }
             if from_ts >= c.from_ts && to_ts <= c.to_ts + 60 {
-                let _ = app.emit("log", "Keine weiteren Nachrichten nötig, Ergebnis aus gespeicherten Daten.".to_string());
+                let _ = app.emit("log", tr!("backend.log.from_cache_only"));
             }
             c
         }
@@ -370,7 +377,7 @@ pub async fn run_analysis(
     c.own_can_get_participants = own_can_get_participants;
     c.updated_at = Utc::now().timestamp();
     if let Err(e) = cache::save(&c) {
-        let _ = app.emit("log", format!("Warnung: Daten konnten nicht gespeichert werden: {}", e));
+        let _ = app.emit("log", tr!("backend.log.cache_save_failed", error = e));
     }
 
     // ── Joined date for members active in the window (only once per user) ────
@@ -397,7 +404,7 @@ pub async fn run_analysis(
             }
         }
         if let Err(e) = cache::save(&c) {
-            let _ = app.emit("log", format!("Warnung: Daten konnten nicht gespeichert werden: {}", e));
+            let _ = app.emit("log", tr!("backend.log.cache_save_failed", error = e));
         }
     }
 
@@ -449,10 +456,10 @@ async fn scan_window(
     let to = cache::ts_to_dt(to_ts);
     let _ = app.emit(
         "log",
-        format!(
-            "Scanne Nachrichten von {} bis {}",
-            from.format("%Y-%m-%d %H:%M"),
-            to.format("%Y-%m-%d %H:%M")
+        tr!(
+            "backend.log.scanning_range",
+            from = from.format("%Y-%m-%d %H:%M").to_string(),
+            to = to.format("%Y-%m-%d %H:%M").to_string()
         ),
     );
 
@@ -473,7 +480,7 @@ async fn scan_window(
     loop {
         if CANCEL.load(Ordering::Relaxed) {
             CANCEL.store(false, Ordering::Relaxed);
-            let _ = app.emit("log", "Analyse abgebrochen.".to_string());
+            let _ = app.emit("log", tr!("backend.log.analysis_cancelled"));
             return Err(AnalysisError::Cancelled);
         }
         match msg_iter.next().await {
@@ -493,7 +500,7 @@ async fn scan_window(
                 }
                 if scanned % 500 == 0 {
                     let _ = app.emit("progress", scanned);
-                    let _ = app.emit("log", format!("Bisher {} Nachrichten gescannt…", scanned));
+                    let _ = app.emit("log", tr!("backend.log.scanned_so_far", count = scanned));
                 }
 
                 if let Some(sender_id) = msg.sender_id() {
@@ -609,9 +616,10 @@ async fn scan_window(
                 }
                 let _ = app.emit(
                     "log",
-                    format!(
-                        "Warnung: Scan nach {} Nachrichten mit Fehler abgebrochen ({}). Der Zeitraum ist ggf. unvollständig.",
-                        scanned, e
+                    tr!(
+                        "backend.log.scan_aborted_error",
+                        count = scanned,
+                        error = e.to_string()
                     ),
                 );
                 complete = false;
@@ -620,22 +628,17 @@ async fn scan_window(
         }
     }
 
-    let _ = app.emit("log", format!("Fertig. {} Nachrichten gescannt.", scanned));
+    let _ = app.emit("log", tr!("backend.log.scan_done", count = scanned));
     if total_polls + total_quizzes > 0 {
         let _ = app.emit(
             "log",
-            format!("Umfragen: {} | Quizze: {}", total_polls, total_quizzes),
+            tr!("backend.log.polls_quizzes", polls = total_polls, quizzes = total_quizzes),
         );
     }
     if unsupported_media_count > 0 {
         let _ = app.emit(
             "log",
-            format!(
-                "⚠ {} Nachricht(en) mit unbekanntem Medienformat erkannt (möglicherweise Umfragen \
-                 mit Bild/Link). Diese konnten nicht ausgewertet werden. \
-                 Bitte die grammers-Bibliothek aktualisieren.",
-                unsupported_media_count
-            ),
+            tr!("backend.log.unsupported_media", count = unsupported_media_count),
         );
     }
     let _ = app.emit("progress", scanned);
@@ -667,13 +670,13 @@ async fn fetch_joined_dates(
 
     let _ = app.emit(
         "log",
-        format!("Hole Beitrittsdaten für {} Mitglieder…", user_ids.len()),
+        tr!("backend.log.fetching_joined", count = user_ids.len()),
     );
 
     for (count, &user_id) in user_ids.iter().enumerate() {
         if CANCEL.load(Ordering::Relaxed) {
             CANCEL.store(false, Ordering::Relaxed);
-            let _ = app.emit("log", "Analyse abgebrochen.".to_string());
+            let _ = app.emit("log", tr!("backend.log.analysis_cancelled"));
             return Err(AnalysisError::Cancelled);
         }
         let user_ref = PeerRef {
@@ -705,13 +708,13 @@ async fn fetch_joined_dates(
         if (count + 1) % 20 == 0 {
             let _ = app.emit(
                 "log",
-                format!("Beitrittsdaten: {}/{} geholt…", count + 1, user_ids.len()),
+                tr!("backend.log.joined_progress", done = count + 1, total = user_ids.len()),
             );
         }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
-    let _ = app.emit("log", "Beitrittsdaten vollständig.".to_string());
+    let _ = app.emit("log", tr!("backend.log.joined_done"));
     Ok(out)
 }
 
@@ -948,14 +951,14 @@ pub async fn fetch_user_status(user_id: i64) -> Result<UserOnlineStatus, Analysi
     let pr = peer
         .to_ref()
         .await
-        .ok_or_else(|| AnalysisError::Telegram("Could not obtain peer reference".into()))?;
+        .ok_or_else(|| AnalysisError::Telegram(tr!("backend.err.no_peer_reference")))?;
 
     let input_user = match tl::enums::InputPeer::from(pr) {
         tl::enums::InputPeer::User(u) => tl::enums::InputUser::User(tl::types::InputUser {
             user_id: u.user_id,
             access_hash: u.access_hash,
         }),
-        _ => return Err(AnalysisError::Telegram("Kein Benutzer-Peer".into())),
+        _ => return Err(AnalysisError::Telegram(tr!("backend.err.not_a_user_peer"))),
     };
 
     let users = client
@@ -966,7 +969,7 @@ pub async fn fetch_user_status(user_id: i64) -> Result<UserOnlineStatus, Analysi
         .map_err(|e| AnalysisError::Telegram(e.to_string()))?;
 
     let Some(tl::enums::User::User(u)) = users.into_iter().next() else {
-        return Err(AnalysisError::Telegram("Nutzer nicht gefunden".into()));
+        return Err(AnalysisError::Telegram(tr!("backend.err.user_not_found")));
     };
 
     let (kind, was_online) = match u.status {

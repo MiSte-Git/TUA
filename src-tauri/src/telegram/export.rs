@@ -20,12 +20,50 @@ fn fmt_datetime(ts: Option<i64>) -> String {
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug)]
 pub enum ExportError {
-    #[error("Schreibfehler: {0}")]
     Io(String),
-    #[error("CSV-Fehler: {0}")]
     Csv(String),
+}
+
+impl std::fmt::Display for ExportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Io(d) => tr!("backend.err.write", detail = d),
+            Self::Csv(d) => tr!("backend.err.csv", detail = d),
+        };
+        f.write_str(&s)
+    }
+}
+
+impl std::error::Error for ExportError {}
+
+// ── Labels ────────────────────────────────────────────────────────────────────
+
+/// Texte fuer die Kommentarzeilen im CSV in der gewaehlten UI-Sprache.
+/// Kommen aus dem Frontend (Abschnitt `csv` der Uebersetzungsdateien),
+/// Platzhalter im i18next-Format `{{name}}`. Fehlt ein Text, steht der Schluessel.
+#[derive(serde::Deserialize, Debug, Default)]
+#[serde(transparent)]
+pub struct Labels(HashMap<String, String>);
+
+impl Labels {
+    fn t(&self, key: &str) -> String {
+        self.0.get(key).cloned().unwrap_or_else(|| key.to_string())
+    }
+
+    fn tp(&self, key: &str, params: &[(&str, &dyn std::fmt::Display)]) -> String {
+        let mut s = self.t(key);
+        for (name, value) in params {
+            s = s.replace(&format!("{{{{{}}}}}", name), &value.to_string());
+        }
+        s
+    }
+
+    /// Kommentarzeile `# <text>`
+    fn line(&self, key: &str, params: &[(&str, &dyn std::fmt::Display)]) -> [String; 1] {
+        [format!("# {}", self.tp(key, params))]
+    }
 }
 
 impl From<std::io::Error> for ExportError {
@@ -53,36 +91,36 @@ pub struct ActivityExportOptions {
     pub st_ids: Vec<i64>,
 }
 
-fn period_text(result: &AnalysisResult) -> String {
-    let span = match (&result.scan_from, &result.scan_to) {
-        (Some(f), Some(t)) => format!(" ({} bis {})", f, t),
-        _ => String::new(),
-    };
+fn period_text(result: &AnalysisResult, l: &Labels) -> String {
     if result.period_months > 0 {
-        format!("letzte {} Monate{}", result.period_months, span)
+        let span = match (&result.scan_from, &result.scan_to) {
+            (Some(f), Some(t)) => format!(" ({})", l.tp("range", &[("from", f), ("to", t)])),
+            _ => String::new(),
+        };
+        // `period_months` liefert das Frontend bereits mit aufgeloester Pluralform
+        format!("{}{}", l.t("period_months"), span)
     } else {
-        format!(
-            "{} bis {}",
-            result.period_from.as_deref().unwrap_or("?"),
-            result.period_to.as_deref().unwrap_or("?")
+        l.tp(
+            "range",
+            &[
+                ("from", &result.period_from.as_deref().unwrap_or("?")),
+                ("to", &result.period_to.as_deref().unwrap_or("?")),
+            ],
         )
     }
 }
 
-fn kind_label(kind: &str) -> &str {
+fn kind_label(kind: &str, l: &Labels) -> String {
     match kind {
-        "message" => "Nachricht",
-        "reaction" => "Reaktion",
-        "poll" => "Umfrage",
-        "quiz" => "Quiz",
-        other => other,
+        "message" | "reaction" | "poll" | "quiz" => l.t(&format!("activity_{}", kind)),
+        other => other.to_string(),
     }
 }
 
-/// ISO calendar week as `2026-KW41`.
-fn iso_week(dt: &chrono::DateTime<chrono::Utc>) -> String {
+/// ISO calendar week, e.g. `2026-KW41` (prefix from the labels).
+fn iso_week(dt: &chrono::DateTime<chrono::Utc>, l: &Labels) -> String {
     let w = dt.iso_week();
-    format!("{}-KW{:02}", w.year(), w.week())
+    format!("{}-{}{:02}", w.year(), l.t("week_prefix"), w.week())
 }
 
 fn sibling_path(path: &Path, suffix: &str) -> PathBuf {
@@ -106,6 +144,7 @@ pub fn export_csv(
     chat_info: &ChatInfo,
     path: &Path,
     opts: &ActivityExportOptions,
+    l: &Labels,
 ) -> Result<Vec<String>, ExportError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ExportError::Io(e.to_string()))?;
@@ -134,25 +173,28 @@ pub fn export_csv(
         .filter(|m| m.message_count >= min_messages && !excluded_ids.contains(&m.user_id))
         .count();
 
-    write_chat_header(&mut wtr, chat_info, "Aktivitaets-Analyse - Zusammenfassung pro Mitglied")?;
-    write_activity_filter_block(&mut wtr, result, opts)?;
+    let details_suffix = sanitize_filename_part(&l.t("details_suffix"));
+    let details_suffix = if details_suffix.is_empty() { "details".to_string() } else { details_suffix };
 
-    wtr.write_record(&["# --- Ergebnis ---".to_string()])?;
-    wtr.write_record(&[format!("# Nachrichten gescannt: {}", result.total_messages)])?;
+    write_chat_header(&mut wtr, chat_info, &l.t("kind_summary"), l)?;
+    write_activity_filter_block(&mut wtr, result, opts, l)?;
+
+    wtr.write_record(&l.line("section_result", &[]))?;
+    wtr.write_record(&l.line("scanned", &[("value", &result.total_messages)]))?;
     if let Some(mc) = chat_info.member_count {
-        wtr.write_record(&[format!("# Gesamtmitglieder: {}", mc)])?;
+        wtr.write_record(&l.line("total_members", &[("value", &mc)]))?;
     }
-    wtr.write_record(&[format!("# Mitglieder mit Nachrichten: {}", a)])?;
-    wtr.write_record(&[format!("# davon < Schwellenwert ({}): {}", min_messages, b)])?;
+    wtr.write_record(&l.line("with_messages", &[("value", &a)]))?;
+    wtr.write_record(&l.line("below_threshold", &[("threshold", &min_messages), ("value", &b)]))?;
     if c_total > 0 {
-        wtr.write_record(&[format!("# manuell ausgeschlossen (gesamt): {}", c_total)])?;
+        wtr.write_record(&l.line("excluded_total", &[("value", &c_total)]))?;
     }
     if c_above > 0 {
-        wtr.write_record(&[format!("# manuell ausgeschlossen (>= Schwellenwert): {}", c_above)])?;
+        wtr.write_record(&l.line("excluded_above", &[("value", &c_above)]))?;
     }
-    wtr.write_record(&[format!("# Aktive Mitglieder: {}", active_count)])?;
+    wtr.write_record(&l.line("active", &[("value", &active_count)]))?;
     if !result.events.is_empty() {
-        wtr.write_record(&["# Fuer kuerzere Zeitraeume die Datei mit Endung _Einzeldaten verwenden.".to_string()])?;
+        wtr.write_record(&l.line("details_hint", &[("suffix", &details_suffix)]))?;
     }
 
     wtr.write_record(&[
@@ -210,13 +252,13 @@ pub fn export_csv(
         let info: HashMap<i64, &MemberActivity> =
             members.iter().map(|m| (m.user_id, m)).collect();
 
-        let dpath = sibling_path(path, "Einzeldaten");
+        let dpath = sibling_path(path, &details_suffix);
         let mut w = csv::WriterBuilder::new().flexible(true).from_path(&dpath)?;
-        write_chat_header(&mut w, chat_info, "Aktivitaets-Analyse - Einzeldaten")?;
-        write_activity_filter_block(&mut w, result, opts)?;
-        w.write_record(&["# Alle Aktivitaeten des analysierten Zeitraums. Eine Zeile pro Aktivitaet. Zeiten in UTC.".to_string()])?;
-        w.write_record(&["# Reaktionen tragen das Datum der zugehoerigen Nachricht.".to_string()])?;
-        w.write_record(&[format!("# Zeilen: {}", result.events.len())])?;
+        write_chat_header(&mut w, chat_info, &l.t("kind_details"), l)?;
+        write_activity_filter_block(&mut w, result, opts, l)?;
+        w.write_record(&l.line("details_intro", &[]))?;
+        w.write_record(&l.line("details_reactions_hint", &[]))?;
+        w.write_record(&l.line("rows", &[("value", &result.events.len())]))?;
         w.write_record(&[
             "date",
             "time_utc",
@@ -241,12 +283,12 @@ pub fn export_csv(
             w.write_record(&[
                 dt.format("%Y-%m-%d").to_string(),
                 dt.format("%H:%M:%S").to_string(),
-                iso_week(&dt),
+                iso_week(&dt, l),
                 dt.format("%Y-%m").to_string(),
                 ev.user_id.to_string(),
                 name,
                 uname,
-                kind_label(&ev.kind).to_string(),
+                kind_label(&ev.kind, l),
                 is_bot.to_string(),
                 excluded_ids.contains(&ev.user_id).to_string(),
                 st_ids.contains(&ev.user_id).to_string(),
@@ -263,15 +305,16 @@ fn write_activity_filter_block<W: std::io::Write>(
     wtr: &mut csv::Writer<W>,
     result: &AnalysisResult,
     opts: &ActivityExportOptions,
+    l: &Labels,
 ) -> Result<(), ExportError> {
-    wtr.write_record(&["# --- Filter-Optionen ---".to_string()])?;
-    wtr.write_record(&[format!("# Analysierter Zeitraum: {}", period_text(result))])?;
-    wtr.write_record(&[format!("# Reaktionen einbezogen: {}", ja_nein(opts.include_reactions))])?;
-    wtr.write_record(&[format!("# Mindest-Nachrichten: {}", opts.min_messages)])?;
-    wtr.write_record(&[format!("# Mindest-Reaktionen: {}", opts.min_reactions)])?;
-    wtr.write_record(&[format!("# Mindest-Umfrageteilnahmen: {}", opts.min_poll_participations)])?;
-    wtr.write_record(&[format!("# Manuell ausgeschlossene Mitglieder: {}", opts.excluded_ids.len())])?;
-    wtr.write_record(&[format!("# Als Servant-Team markiert: {}", opts.st_ids.len())])?;
+    wtr.write_record(&l.line("section_filter", &[]))?;
+    wtr.write_record(&l.line("analysed_period", &[("value", &period_text(result, l))]))?;
+    wtr.write_record(&l.line("reactions_included", &[("value", &yes_no(opts.include_reactions, l))]))?;
+    wtr.write_record(&l.line("min_messages", &[("value", &opts.min_messages)]))?;
+    wtr.write_record(&l.line("min_reactions", &[("value", &opts.min_reactions)]))?;
+    wtr.write_record(&l.line("min_polls", &[("value", &opts.min_poll_participations)]))?;
+    wtr.write_record(&l.line("excluded_members", &[("value", &opts.excluded_ids.len())]))?;
+    wtr.write_record(&l.line("st_marked", &[("value", &opts.st_ids.len())]))?;
     Ok(())
 }
 
@@ -289,13 +332,10 @@ pub struct JoinLeaveExportFilter {
     pub date_to: Option<String>,
 }
 
-fn event_label(event_type: &str) -> &str {
+fn event_label(event_type: &str, l: &Labels) -> String {
     match event_type {
-        "added" => "hinzugefügt",
-        "joined" => "beigetreten",
-        "left" => "verlassen",
-        "removed" => "entfernt",
-        other => other,
+        "added" | "joined" | "left" | "removed" => l.t(&format!("event_{}", event_type)),
+        other => other.to_string(),
     }
 }
 
@@ -305,6 +345,7 @@ pub fn export_join_leave_csv(
     chat_info: &ChatInfo,
     path: &Path,
     filter: &JoinLeaveExportFilter,
+    l: &Labels,
 ) -> Result<(), ExportError> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ExportError::Io(e.to_string()))?;
@@ -314,10 +355,10 @@ pub fn export_join_leave_csv(
         .flexible(true)
         .from_path(path)?;
 
-    write_chat_header(&mut wtr, chat_info, "Ein-/Austritt")?;
+    write_chat_header(&mut wtr, chat_info, &l.t("kind_join_leave"), l)?;
 
-    wtr.write_record(&["# --- Filter-Optionen ---".to_string()])?;
-    wtr.write_record(&[format!("# Suchbegriff: {}", filter.search)])?;
+    wtr.write_record(&l.line("section_filter", &[]))?;
+    wtr.write_record(&l.line("search_term", &[("value", &filter.search)]))?;
     if let Some(uid) = filter.user_id {
         let name = filter.display_name.as_deref().unwrap_or("");
         let uname = filter
@@ -325,29 +366,32 @@ pub fn export_join_leave_csv(
             .as_deref()
             .map(|u| format!(" @{}", u))
             .unwrap_or_default();
-        wtr.write_record(&[format!("# Mitglied: {}{} (ID {})", name, uname, uid)])?;
+        wtr.write_record(&l.line("member", &[("name", &name), ("username", &uname), ("id", &uid)]))?;
     }
     let types = filter
         .event_types
         .iter()
-        .map(|t| event_label(t))
+        .map(|t| event_label(t, l))
         .collect::<Vec<_>>()
         .join(" / ");
-    wtr.write_record(&[format!("# Ereignistypen: {}", types)])?;
+    wtr.write_record(&l.line("event_types", &[("value", &types)]))?;
     let from = filter
         .date_from
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or("Anfang des Chatverlaufs");
+        .map(str::to_string)
+        .unwrap_or_else(|| l.t("from_start"));
     let to = filter
         .date_to
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or("heute");
-    wtr.write_record(&[format!("# Zeitraum: {} bis {}", from, to)])?;
+        .map(str::to_string)
+        .unwrap_or_else(|| l.t("today"));
+    let range = l.tp("range", &[("from", &from), ("to", &to)]);
+    wtr.write_record(&l.line("period", &[("value", &range)]))?;
 
-    wtr.write_record(&["# --- Ergebnis ---".to_string()])?;
-    wtr.write_record(&[format!("# Treffer: {}", events.len())])?;
+    wtr.write_record(&l.line("section_result", &[]))?;
+    wtr.write_record(&l.line("hits", &[("value", &events.len())]))?;
 
     wtr.write_record(&[
         "event",
@@ -367,7 +411,7 @@ pub fn export_join_leave_csv(
             .map(|dt| dt.format("%Y-%m-%d").to_string())
             .unwrap_or_else(|_| ev.date.chars().take(10).collect());
         wtr.write_record(&[
-            event_label(&ev.event_type).to_string(),
+            event_label(&ev.event_type, l),
             date,
             ev.time.clone(),
             ev.affected_user.clone(),
@@ -386,23 +430,24 @@ pub fn export_join_leave_csv(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn ja_nein(v: bool) -> &'static str {
-    if v { "ja" } else { "nein" }
+fn yes_no(v: bool, l: &Labels) -> String {
+    l.t(if v { "yes" } else { "no" })
 }
 
 fn write_chat_header<W: std::io::Write>(
     wtr: &mut csv::Writer<W>,
     chat_info: &ChatInfo,
     kind: &str,
+    l: &Labels,
 ) -> Result<(), ExportError> {
-    let now = Local::now().format("%Y-%m-%d %H:%M:%S %:z");
-    wtr.write_record(&[format!("# Export: {}", now)])?;
-    wtr.write_record(&[format!("# Auswertung: {}", kind)])?;
-    wtr.write_record(&[format!("# Chat: {}", chat_info.title)])?;
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S %:z").to_string();
+    wtr.write_record(&l.line("header_export", &[("value", &now)]))?;
+    wtr.write_record(&l.line("header_kind", &[("value", &kind)]))?;
+    wtr.write_record(&l.line("header_chat", &[("value", &chat_info.title)]))?;
     if let Some(username) = &chat_info.username {
-        wtr.write_record(&[format!("# Username: @{}", username)])?;
+        wtr.write_record(&l.line("header_username", &[("value", &username)]))?;
     }
-    wtr.write_record(&[format!("# Chat-ID: {}", chat_info.id)])?;
+    wtr.write_record(&l.line("header_chat_id", &[("value", &chat_info.id)]))?;
     Ok(())
 }
 

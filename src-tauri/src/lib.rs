@@ -1,9 +1,11 @@
+#[macro_use]
+mod i18n;
 mod cancel;
 mod config;
 mod telegram;
 
 use telegram::{
-    ActivityExportOptions, AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError,
+    ActivityExportOptions, AnalysisError, AnalysisResult, AuthError, ChatInfo, ChatMember, ConnectResult, ExportError, Labels,
     FirstMentionResult, JoinLeaveEvent, JoinLeaveExportFilter, JoinLeaveSearchResult,
     UserOnlineStatus,
 };
@@ -88,7 +90,7 @@ fn resolve_credentials() -> Result<(i32, String), String> {
             log_credentials_diagnostics(&config::config_path().display().to_string(), id, &hash);
             Ok((id, hash))
         }
-        _ => Err("Credentials nicht gesetzt. Bitte API ID und API Hash eingeben.".to_string()),
+        _ => Err(tr!("backend.err.credentials_missing")),
     }
 }
 
@@ -154,7 +156,7 @@ async fn get_auth_status() -> Result<bool, String> {
 
 #[tauri::command]
 async fn resolve_chat(chat_url: String, app: tauri::AppHandle) -> Result<ChatInfo, String> {
-    cancel::run(cancel::Kind::Resolve, &app, "Verbinden abgebrochen.", async {
+    cancel::run(cancel::Kind::Resolve, &app, &tr!("backend.log.connect_cancelled"), async {
         telegram::analysis::resolve_chat(&chat_url)
             .await
             .map_err(|e: AnalysisError| e.to_string())
@@ -178,7 +180,7 @@ async fn run_analysis(
     app: tauri::AppHandle,
 ) -> Result<AnalysisResult, String> {
     let handle = app.clone();
-    cancel::run(cancel::Kind::Analysis, &handle, "Analyse abgebrochen.", async move {
+    cancel::run(cancel::Kind::Analysis, &handle, &tr!("backend.log.analysis_cancelled"), async move {
         telegram::analysis::run_analysis(
             &chat_url,
             months,
@@ -232,12 +234,14 @@ async fn export_csv(
     chat_info: ChatInfo,
     path: String,
     options: ActivityExportOptions,
+    labels: Option<Labels>,
 ) -> Result<Vec<String>, String> {
     telegram::export::export_csv(
         &result,
         &chat_info,
         std::path::Path::new(&path),
         &options,
+        &labels.unwrap_or_default(),
     )
     .map_err(|e: ExportError| e.to_string())
 }
@@ -248,12 +252,14 @@ async fn export_join_leave_csv(
     chat_info: ChatInfo,
     path: String,
     filter: JoinLeaveExportFilter,
+    labels: Option<Labels>,
 ) -> Result<(), String> {
     telegram::export::export_join_leave_csv(
         &events,
         &chat_info,
         std::path::Path::new(&path),
         &filter,
+        &labels.unwrap_or_default(),
     )
     .map_err(|e: ExportError| e.to_string())
 }
@@ -291,11 +297,11 @@ async fn load_chat_members(
 ) -> Result<Vec<ChatMember>, String> {
     let client = telegram::auth::get_client()
         .await
-        .ok_or("Not authorized")?;
+        .ok_or_else(|| tr!("backend.err.not_authorized"))?;
     cancel::run(
         cancel::Kind::Members,
         &app,
-        "Laden der Mitgliederliste abgebrochen.",
+        &tr!("backend.log.members_cancelled"),
         telegram::mention::load_chat_members(&client, chat_id, &app),
     )
     .await
@@ -329,11 +335,11 @@ async fn find_first_mention(
 ) -> Result<FirstMentionResult, String> {
     let client = telegram::auth::get_client()
         .await
-        .ok_or("Not authorized")?;
+        .ok_or_else(|| tr!("backend.err.not_authorized"))?;
     cancel::run(
         cancel::Kind::Mention,
         &app,
-        "Suche abgebrochen.",
+        &tr!("backend.log.search_cancelled"),
         telegram::mention::find_first_mention(&client, chat_id, chat_username, username, &app),
     )
     .await
@@ -352,11 +358,11 @@ async fn find_join_leave_events(
 ) -> Result<JoinLeaveSearchResult, String> {
     let client = telegram::auth::get_client()
         .await
-        .ok_or("Not authorized")?;
+        .ok_or_else(|| tr!("backend.err.not_authorized"))?;
     cancel::run(
         cancel::Kind::Mention,
         &app,
-        "Suche abgebrochen.",
+        &tr!("backend.log.search_cancelled"),
         telegram::mention::find_join_leave_events(
             &client,
             chat_id,
@@ -395,10 +401,7 @@ pub fn run() {
                 std::panic::set_hook(Box::new(move |info| {
                     let _ = handle.emit(
                         "log",
-                        format!(
-                            "Interner Fehler: {}. Bitte den Vorgang abbrechen und erneut versuchen.",
-                            info
-                        ),
+                        tr!("backend.log.internal_error", detail = info.to_string()),
                     );
                     default_hook(info);
                 }));
