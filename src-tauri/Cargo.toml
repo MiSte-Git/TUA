@@ -30,3 +30,6 @@ toml = "0.8"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+[patch.crates-io]
+glib = { path = "vendor/glib-0.18.5" }
